@@ -24,6 +24,7 @@ def create_options_parser():
   p.add_option("-t","--tags",  dest="num_tags",   help="number of TAGS", type="int", default=1)
   p.add_option("-r","--rseed",  dest="randseed",help="RANDdom SEED (default = 0)",type="int",default=0)
   p.add_option("--not-utf8",dest="utf8",help="input is *not* UTF8",default=True,action="store_false")
+  p.add_option("--classes",dest="classes",help="expect class sequence in third position",default=False,action="store_true")
   p.add_option("-q","--seq",    dest="seq",     help="use sequential token model, i.e. #3", default=False, action="store_true")
   p.add_option("-a","--agreement", dest="agreement",     help="use agreement model, i.e. #4", default=False, action="store_true")
   p.add_option("-d","--dict",   dest="dict",    help="input dictionary (format: <filename>:[t][s][f]) t=use tag, s=use seg, f=freeze", action="append", default=[])
@@ -36,7 +37,8 @@ def read_corpus(filename, utf8, boundary):
         assert len(cols) >= 2
         cols[0] = int (cols[0])
         cols[1] = tuple(cols[1].split())
-        return tuple(cols[0:2])
+        cols[2] = tuple(cols[2].split())
+        return tuple(cols[0:3])
     rows = tuple([ parse_line (line.decode("utf-8") if utf8 else line)
                    for line in smart_gzip_open (filename) ])
 
@@ -51,15 +53,16 @@ def read_corpus(filename, utf8, boundary):
     rows = tuple(new_rows)
     return zip(*rows)
 
-def count_word_types (counts, tokens):
+def count_word_types (counts, tokens, classes):
     assert len(counts) == len(tokens)
+    assert len(tokens) == len(classes)
     wc = Counter()
-    for count,token in zip(counts,tokens):
+    for count,token,cls in zip(counts,tokens, classes):
         if count < 0: continue
         to_segment = count > 0
-        wc [token] += 1 if to_segment else 0
+        wc [(token,cls)] += 1 if to_segment else 0
 
-    return tuple([ (w,c) for w,c in sorted ( wc.iteritems(), key=lambda (w,c): w ) ])
+    return tuple([ (w[0],c,w[1]) for w,c in sorted ( wc.iteritems(), key=lambda (w,c): w ) ])
 
 def check_data (token_counts, tokens, boundary):
     assert len(token_counts) == len(tokens)
@@ -68,13 +71,14 @@ def check_data (token_counts, tokens, boundary):
             assert c < 0
 
 def check_dict (num_tags, input_dict):
-    for (word,tag,stem_index,compact_spans,init_seg,init_stem,init_tag,fix_seg,fix_stem,fix_tag) in input_dict:
+    for (word,cls,tag,stem_index,compact_spans,init_seg,init_stem,init_tag,fix_seg,fix_stem,fix_tag) in input_dict:
         num_morphemes = len(compact_spans) + 1
         assert 0 <= stem_index < num_morphemes
         assert 0 <= tag
+        assert cls == "#" or len(cls) == len(word)
         if init_tag: assert tag <= num_tags
 
-def run_gibbs ( token_counts, tokens, rand_seed, num_tags, numit,
+def run_gibbs ( token_counts, tokens, classes, rand_seed, num_tags, numit,
                 input_dictionary,
                 seq,
                 boundary,
@@ -83,12 +87,13 @@ def run_gibbs ( token_counts, tokens, rand_seed, num_tags, numit,
     check_data (token_counts, tokens, boundary)
     check_dict (num_tags, input_dictionary)
     
-    wordcounts = count_word_types (token_counts, tokens)
+    wordcounts = count_word_types (token_counts, tokens, classes)
     print "python: corpus has %d types" % len(wordcounts)
 
     return c_run_gibbs ( rand_seed, num_tags, numit, wordcounts,
                          input_dictionary,
                          tokens if seq else (),
+                         classes if classes is not None else ("#",)*len(tokens), # needed?
                          boundary,
                          agreement
                          )
@@ -96,7 +101,7 @@ def run_gibbs ( token_counts, tokens, rand_seed, num_tags, numit,
 def dump_dict (outfile, word_states, utf8):
     for ws in word_states:
         if not ( ws.seg_frozen and ws.tag_frozen ):
-            print >>outfile,"%s %d %d" % (ws.word,ws.tag,ws.stem_index),
+            print >>outfile,"%s %s %d %d" % (ws.word,ws.cls,ws.tag,ws.stem_index),
             cs = ws.compact_spans
             starts = [ 0 ]
             starts. extend ( [ i for i in cs ] )
@@ -125,13 +130,13 @@ def read_dict (infile, utf8):
         else:
             line = line.strip()
         tokens = line.split()
-        (word,tag,stem_index) = tokens[:3]
+        (word,cls,tag,stem_index) = tokens[:4]
         tag = int(tag)
         stem_index = int(stem_index)
-        morphemes = tuple(tokens[3:])
+        morphemes = tuple(tokens[4:])
         assert word == "".join(morphemes)
         s = get_compact_spans (morphemes)
-        d. append (  (word,tag,stem_index,s) )
+        d. append (  (word,cls,tag,stem_index,s) )
     return tuple(d)
 
 def enrich_dict ( input_dict,
@@ -148,7 +153,7 @@ def enrich_dict ( input_dict,
         r. append (fix_tags)
         return tuple(r)
 
-    fields = ('word','tag','stem_index','spans','init_seg','init_stem','init_tag','fix_seg','fix_stem','fix_tag')
+    fields = ('word','class','tag','stem_index','spans','init_seg','init_stem','init_tag','fix_seg','fix_stem','fix_tag')
     names = dict( (f,i) for i,f in enumerate(fields) )
     return (names,tuple([ enrich (entry, init_segs, init_stem, init_tags, fix_segs, fix_stem, fix_tags)
                           for entry in input_dict ]))
@@ -227,6 +232,8 @@ def main():
     cols = read_corpus (options.corpus, options.utf8, boundary)
     counts = cols[0]
     tokens = tuple(map(lambda x : "".join(x), cols[1]))
+    classes = tuple(map(lambda x : "".join(x), cols[2])) if options.classes else ("#",)*len(tokens)
+
     
     if options.utf8: print "python: using utf-8"
     for i in range(5):
@@ -239,7 +246,7 @@ def main():
 
     print "python: corpus has %d tokens (after removing repeated boundaries)" % len(tokens)
     print "python: input dictionaries have %d entries" % len(input_dictionary)
-    word_states = run_gibbs ( counts, tokens, options.randseed, options.num_tags, options.numit,
+    word_states = run_gibbs ( counts, tokens, classes, options.randseed, options.num_tags, options.numit,
                               input_dictionary,
                               options.seq,
                               boundary,

@@ -60,6 +60,8 @@ private:
   dirichlet_mult<int> distr_type_tag_;
 
   const std::vector<std::wstring>& tokens_;
+  const std::vector<std::wstring>& classes_;
+
   const word_index_map_type word_index_;
   const word_locations_type word_locations_;
 
@@ -67,7 +69,7 @@ private:
   std::vector<fast_dirichlet_mult> distrs_transition_;
 
   static
-  word_state_array_type make_word_states(const std::vector<boost::tuple<std::string,int> >& type_counts,
+  word_state_array_type make_word_states(const std::vector<boost::tuple<std::string,int,std::string> >& type_counts,
                                          const int num_tags,
                                          rng_type& rng,
                                          const std::tr1::unordered_map<std::string,word_state>& input_dict)
@@ -85,8 +87,9 @@ private:
         std::tr1::unordered_map<std::string,word_state>::const_iterator it = input_dict.find(w);
 
         const int c = type_counts [i]. get<1>();
+        const std::string& cls = type_counts [i]. get<2>();
         const int tag = num_tags > 1 ? roll_die() : 1;
-        word_state ws (w, c, tag);
+        word_state ws (w, c, cls, tag);
 
         if (it != input_dict.end())
           {
@@ -230,17 +233,18 @@ private:
 public:
   
   lexicon_state(boost::mt19937& rng,
-                const std::vector<boost::tuple<std::string,int> >& type_counts,
+                const std::vector<boost::tuple<std::string,int,std::string> >& type_counts,
                 const int num_tags,
                 const std::tr1::unordered_map<std::string,word_state>& input_dict,
                 const std::vector<std::wstring>& tokens,
+                const std::vector<std::wstring>& classes,
                 const std::wstring& boundary,
                 const bool use_agreement)
     : 
     MAX_SPANS (5),
     NUM_TAGS (num_tags),
     MAX_AFFIXES (2),
-    MODEL ( get_model_number(num_tags, tokens, use_agreement) ),
+    MODEL ( get_model_number(num_tags, tokens, use_agreement) ), // JM TODO: consider classes
     ALPHA_TAG (0.1),
     ALPHA_SEG (0.1),
     ALPHA_TOK_EMIT (1e-5),
@@ -259,8 +263,9 @@ public:
     distr_type_tag_ (ALPHA_TAG),
 
     tokens_ (tokens),
+    classes_ (classes),
     word_index_ ( make_word_index(words_) ),
-    word_locations_ ( get_word_locations(tokens, words_, word_index_) ),
+    word_locations_ ( get_word_locations(tokens, words_, word_index_) ), // JM TODO: consider classes
     fast_distrs_token_gt_(ALPHA_TOK_EMIT, NUM_TAGS+1)
   {
     std::cout << "C++: MODEL = " << MODEL << std::endl;
@@ -335,6 +340,7 @@ public:
             x_fast_distrs_seg_gt_ [a]. observe ( ws.tag, m, count );
           }
       }
+    // JM TODO consider classes
     if ( ! tokens_.empty() )
       observe_word_state_from_tokens(ws, count);
   }

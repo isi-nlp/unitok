@@ -76,6 +76,7 @@ BOOST_PYTHON_MODULE(c_segmenter)
   
   class_<morphsyn::word_state>("WordState", init<>() )
     .def_readonly("word",&morphsyn::word_state::w_)
+    .def_readonly("cls",&morphsyn::word_state::cls_)
     .def_readwrite("tag",&morphsyn::word_state::tag)
     .def_readwrite("stem_index",&morphsyn::word_state::stem_index)
     .def_readwrite("seg_frozen",&morphsyn::word_state::seg_frozen)

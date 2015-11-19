@@ -25,10 +25,10 @@ namespace bp = boost::python;
 
 namespace morphsyn {
 
-std::vector<boost::tuple<std::string,int> >
+std::vector<boost::tuple<std::string,int,std::string> >
 extract_word_type_counts(bp::tuple& type_counts)
 {
-  std::vector<boost::tuple<std::string,int> > v;
+  std::vector<boost::tuple<std::string,int,std::string> > v;
   v. reserve ( bp::len(type_counts) );
 
   bp::stl_input_iterator<bp::object> begin(type_counts), end;
@@ -37,7 +37,8 @@ extract_word_type_counts(bp::tuple& type_counts)
       const bp::tuple& wc = bp::extract<bp::tuple> ( *begin );
       const std::string w = bp::extract<std::string> ( wc[0] );
       const int c = bp::extract<int> ( wc[1] );
-      v. push_back ( boost::make_tuple ( w, c ) );
+      const std::string cls = bp::extract<std::string> ( wc[2] );
+      v. push_back ( boost::make_tuple ( w, c, cls ) );
     }
   return v;
 }
@@ -110,9 +111,13 @@ std::vector<std::vector<index_pair> >
 generate_possible_spans(const std::size_t word_len, 
                         const std::size_t max_spans, 
                         const bool frozen_spans,
-                        const std::vector<index_pair>& given_spans)
+                        const std::vector<index_pair>& given_spans,
+                        const std::map<std::size_t, std::size_t> charmap)
 {
-  std::vector<std::vector<index_pair> > all_possible_spans;
+  typedef std::vector<index_pair>::const_iterator VI;
+  typedef std::vector<std::vector<index_pair> > VECVEC;
+  VECVEC all_possible_spans;
+  VECVEC mapped_all_possible_spans;
   if (frozen_spans)
     {
       all_possible_spans. push_back (given_spans);
@@ -120,6 +125,23 @@ generate_possible_spans(const std::size_t word_len,
   else
     {
       all_possible_spans = spans_up_to_length (word_len, max_spans);
+      // JM use charmap to convert to real char offsets
+      if (charmap.size() > 0) {
+        for (VECVEC::const_iterator vvi = all_possible_spans.begin(); 
+             vvi != all_possible_spans.end(); ++vvi) {
+          std::vector<index_pair> mv;
+          for (VI vi = vvi->begin(); vi != vvi->end(); ++vi) {
+            std::size_t firstmap = charmap.find(vi->first)->second;
+            std::size_t secondmap = charmap.find(vi->second)->second;
+            mv.push_back(std::make_pair(firstmap, secondmap));
+            //            std::cout << "[" << vi->first << "," << vi->second << "]-> [" 
+            //              << firstmap << "," << secondmap << "] ";
+          }
+          mapped_all_possible_spans.push_back(mv);
+          //          std::cout << std::endl;
+        }
+        all_possible_spans = mapped_all_possible_spans;
+      }
     }
   return all_possible_spans;
 }
@@ -148,9 +170,14 @@ word_state sample_new_word_state ( dart_type& dart, lexicon_state& state, const 
 
   assert ( ws.removed );
 
-  const size_t word_len = ws. word. size();
+  //  const size_t word_len = ws. word. size();
+  const size_t word_len = ws. get_word_len();
+  //  std::cout << ws << std::endl;
+
+  // TODO JM: use heuristics to reduce all possible spans for even long spans.
+  // TODO JM: can take advantage of state having class sequence for word
   const vector<vector<index_pair> > all_possible_spans = generate_possible_spans (word_len, state.MAX_SPANS,
-                                                                                  ws.seg_frozen, ws.spans);
+                                                                                  ws.seg_frozen, ws.spans, ws.charmap);
   assert (all_possible_spans.size() > 0);
   assert (ws.tag > 0);
   const vector<int> all_possible_tags = generate_possible_tags (ws.tag_frozen, ws.tag, state.NUM_TAGS);
@@ -201,19 +228,19 @@ std::tr1::unordered_map<std::string,word_state> parse_input_dict (bp::tuple& inp
     {
       const bp::tuple& entry = bp::extract<bp::tuple> ( *begin );
       const std::string w = bp::extract<std::string> ( entry[0] );
-      const int tag = bp::extract<int> ( entry[1] );
+      const std::string cls = bp::extract<std::string> ( entry[1] );
+      const int tag = bp::extract<int> ( entry[2] );
       assert ( tag >= 0 );
-      const int stem_index = bp::extract<int> ( entry[2] );
+      const int stem_index = bp::extract<int> ( entry[3] );
       assert ( stem_index >= 0 );
-      const bp::tuple& compact_spans =  bp::extract<bp::tuple> ( entry[3] );
-      const bool init_seg = bp::extract<bool> ( entry[4] );
-      const bool init_stem = bp::extract<bool> ( entry[5] );
-      const bool init_tag = bp::extract<bool> ( entry[6] );
-      const bool freeze_seg = bp::extract<bool> ( entry[7] );
-      const bool freeze_stem = bp::extract<bool> ( entry[8] );
-      const bool freeze_tag = bp::extract<bool> ( entry[9] );
-
-      word_state ws(w,0,tag);
+      const bp::tuple& compact_spans =  bp::extract<bp::tuple> ( entry[4] );
+      const bool init_seg = bp::extract<bool> ( entry[5] );
+      const bool init_stem = bp::extract<bool> ( entry[6] );
+      const bool init_tag = bp::extract<bool> ( entry[7] );
+      const bool freeze_seg = bp::extract<bool> ( entry[8] );
+      const bool freeze_stem = bp::extract<bool> ( entry[9] );
+      const bool freeze_tag = bp::extract<bool> ( entry[10] );
+      word_state ws(w,0,cls,tag);
       ws.stem_index = static_cast<std::size_t>(stem_index);
       
       // make spans from compact spans
@@ -274,6 +301,7 @@ parse_tokens (bp::tuple& tokens_py)
   return tokens;
 }
 
+// TODO: add a classes_py or something for character classes
 std::vector<word_state>
 run_gibbs(const int random_seed,
           const int num_tags,
@@ -281,6 +309,7 @@ run_gibbs(const int random_seed,
           bp::tuple& word_types_counts,
           bp::tuple& input_d,
           bp::tuple& tokens_py,
+          bp::tuple& classes_py,
           const std::string& boundary,
           const bool use_agreement
           )
@@ -293,16 +322,18 @@ run_gibbs(const int random_seed,
   dart_type dart(rng, zero_one);
 
   std::cout << "C++: numit = " << numit << std::endl;
-  const std::vector<boost::tuple<std::string,int> >
+  const std::vector<boost::tuple<std::string,int,std::string> >
     v = extract_word_type_counts(word_types_counts);
 
   const std::tr1::unordered_map<std::string,word_state> 
     input_dict = parse_input_dict (input_d);
 
   const std::vector<std::wstring> tokens = parse_tokens (tokens_py);
+  const std::vector<std::wstring> classes = parse_tokens (classes_py);
+  // TODO: parse classes here. add them to state
   lexicon_state state(rng, v, num_tags, 
                       input_dict, 
-                      tokens, widen_string(boundary), use_agreement
+                      tokens, classes, widen_string(boundary), use_agreement
                       );
 
   std::vector<std::size_t> indices = state.non_frozen_indices();

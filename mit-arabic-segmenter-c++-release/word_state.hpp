@@ -30,6 +30,7 @@ public:
 public:
 //private:
   std::string w_;
+  std::string cls_;
 public:
   std::wstring word;
   bool removed;
@@ -40,11 +41,13 @@ public:
   std::size_t tag;  // tag is always used for statistics
   std::size_t stem_index;
   std::vector<index_pair> spans;
+  std::map<std::size_t, std::size_t> charmap;
 
 
   word_state () : removed(true) {}
-  word_state (const std::string& w, const int c, const int t) :
+  word_state (const std::string& w, const int c, const std::string& cls, const int t) :
     w_(w),
+    cls_(cls),
     word (morphsyn::widen_string(w)),
     removed (false), 
     seg_frozen (c <= 0),
@@ -56,6 +59,27 @@ public:
     spans ( make_whole_word_span(word) )
   {
     assert (tag > 0);
+    // create class change map: each class change is another pointer
+    if (cls_ != "#" && word.size() == cls_.size()) {
+      char last='x';
+      int wordpos=0;
+      int changepos=0;
+      for (std::string::const_iterator it = cls_.begin(), end = cls_.end(); it != end; ++it) {
+        if (*it != last){
+          charmap[changepos++]=wordpos;
+          last=*it;
+        }
+        wordpos++;
+      }
+      charmap[changepos]=wordpos;
+    }
+  }
+
+  std::size_t get_word_len() const {
+    // word_len is really number of class alterations, unless no class info exists
+    if (charmap.size() > 0)
+      return charmap.size()-1;
+    return word.size();
   }
 
   bool valid_stem() const
@@ -106,6 +130,7 @@ public:
   bool operator==(const word_state& other) const
   {
     return w_ == other.w_
+        && cls_ == other.cls_
       && word == other.word
       && tag == other.tag
       && stem_index == other.stem_index
@@ -120,7 +145,7 @@ public:
 
   std::ostream& display(std::ostream& os) const
   {
-    os << w_ << " r " << removed 
+    os << w_ << " " << cls_ << " r " << removed 
        << " f " << seg_frozen << ' ' 
        << stem_frozen << ' ' 
        << tag_frozen << ' ' 
