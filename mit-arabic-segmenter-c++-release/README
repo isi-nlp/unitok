@@ -1,0 +1,224 @@
+0.  Contents
+============
+
+This package is a C++ re-implementation of the Arabic segmenter
+described in the following paper:
+
+Modeling Syntactic Context Improves Morphological Segmentation.
+Yoong Keok Lee, Aria Haghighi, Regina Barzilay.
+Proceedings of CoNLL 2011.
+http://www.aclweb.org/anthology-new/W/W11/W11-0301.pdf
+
+1.  Compilation
+2.  Testing the segmenter
+3.  Input/Output formats
+4.  Running the segmenter
+5.  Handling large noisy data sets
+6.  Incremental training
+7.  Change log
+
+1.  Compilation
+===============
+
+You will need g++ and the C++ Boost libraries.  I compiled the package
+with g++ version 4.8.2 and Boost version 1.54 (on Ubuntu 14.04 LTS)
+
+Type "make" to produce c_segmenter.so which is a python module for the
+front-end script run_segmenter.py.  
+
+I have included an AMD-64 CPU binary in this package, but you'll still
+need run-time libraries libboost_python-py27.so.1.54.0 and
+libpython2.7.so.1.0 to use it.
+
+I'm also using the opensource UTF8-CPP library
+http://utfcpp.sourceforge.net/
+which I have included in this package
+
+2.  Testing the segmenter
+=========================
+
+This package has been testd on a GNU/Linux system installed with
+Python version 2.7 and libboost_python-py27.so.1.54.0
+
+If you don't have Boost libraries installed, type
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
+
+In this directory, run (you'll need to have write permissions):
+
+./run_test.bash
+
+
+The segmenter produces outputs in directory "output" as expected if
+you see the following:
+
+dictionary .... OK
+
+3.  Input/Output formats
+========================
+Input format:
+
+* Each line consists of one token: <count><tab><token><tab>#<tab>#
+
+* See atb.tiny and tahyyes.small for examples
+
+* Sentence boundaries are indicated with line
+-1	~~	#	#
+
+* if count is zero, the word is not segmented.  You would want this
+  to apply to long words (say more than 12 characters) or junk, like
+  URLs.
+
+* If you have just a list of word types, i.e. distinct words, create 
+  sentences with one word on each of them
+
+Output format:
+
+* A type-based segmentation dictionary is produced
+
+* Each line consists of one word-type:
+
+  <word> <tag> <zero_based_index_of_stem> <segment_0> ...
+
+* You can ignore the learned tag
+
+* See output.expected/atb.tiny-m4.dict
+
+4.  Running the segmenter
+=========================
+
+* Basic usage:
+
+  ./train.bash random_seed input_file output_prefix
+
+  where:
+  * random_seed is the seed for the pseudo random number generate
+  * input_file contains data described as above
+  * output_prefix is a prefix use to create output files
+
+  (One segmentation dictionary is created for each Model 1 to 4.
+  Model 4 performs best according when evaluated on ATB according
+  to unsupervised segmentation metrics.  For other applications,
+  like MT, lower number models may perform better.)
+  
+* See the very short and self-explanatory train.bash on how you can
+  call the segmenter directly.  Briefly speaking:
+
+* run_segmenter.py takes an input file and produces a text
+  segmentation dictionary for Model 1.  The dictionary is used to 
+  initialize training for Model 2, and so on
+
+* Important tunable parameters
+
+  * -r (random seed): Using different random seeds produces different
+     outputs which can be merged to produced more robust outputs
+     (See section 5.)
+
+  * -i (number of iterations)
+
+  * -o (filename for output dictionary)
+
+* Maximum marginal decoding improves segmentation performance but
+  requires running the segmenter with multiple random restarts and
+  merging/voting the outputs.
+
+  Run ./mmtrain.bash number-of-restarts input_file output_prefix
+
+  See
+
+  Unsupervised Morphology Rivals Supervised Morphology for Arabic MT
+  David Stallard, Jacob Devlin, Michael Kayser, Yoong Keok Lee, Regina Barzilay
+  In Proceedings of ACL 2012 (Short papers)
+
+* See run_test.bash for examples
+                      
+5.  Handling large noisy data sets
+==================================
+
+* For large data sets: (You may have to do some timing experiments
+  to know the limit.  It takes about 2hr+ to run on a 120K token ATB
+  corpus)
+
+
+  * Split the corpus into smaller ones and segment each one seperately.
+    Otherwise, you might not be able to finish running.
+    (You might want to perform some timing experiments to pick a
+    better size)
+
+  * For each model number, merge seperate dictionaries with
+    
+    python2.6 merge_dict.py filelist > merged.dict
+
+    where filelist contains filenames of dictionaries one per line
+
+  * I suggest you also try combining output from different random
+    restarts.
+  
+  * In other words, for a gigantic corpus, split it into
+    managable chunks.  For each chunk, for each
+    model 1 to 4, use at least five different random seeds.  After
+    training, for each model, simply merge the dictionaries.  In
+    short, you'll get one final dictionary for each model. Note that
+    the tag and the stem index for each entry is now meaningless.
+
+  * For Arabic-to-English MT, I think Model 3 might be more
+    appropriate.  (Model 4 tends to split off more inflectional
+    suffixes which I suspect hurts MT.  But I can't be exactly
+    sure.)
+
+* For noisy data:
+
+  * Input files may contain long strings that slow the segmenter down,
+    e.g. URLs, names, pre-processing errors
+
+  * You might just want to set the count for these strings to zero, so
+    that the segmenter ignores them.  (See Input format)
+
+  * At the minimum, I think you should set counts for strings longer
+    than say 12 characters to zero.  You can also use regular
+    expressions to find words with many English alphabets which are
+    likely to be pre-processing errors.
+
+6.  Incremental Training
+========================
+
+Say, you have trained dictionaries with data X.  Now comes data Y.
+There are four options for incremental training with option #1
+being the most optimal and #4 being most practical for large data
+sets.  (See demo#3 in run_test.bash)
+
+(a)  Merge X and Y, initialize model with trained dictionary, and
+     re-train.  
+
+See also incr_train1.bash
+
+I suggest you use this method if X+Y is small, and if you don't
+mind old segmentations changing.  
+
+(b)  Same as (a) but freeze segmentations for all words that appear
+     in X
+
+See also incr_train2.bash
+
+I suggest you use this method Y is much smaller than X (counts in X
+are used although segmentations do not change.)
+
+(c) Same as (b) use Y for training only (instead of X+Y)
+
+See also incr_train3.bash
+
+I suggest you use this method if Y by itself is already quite large 
+(so you can ignore counts from X).  
+
+(d) Same as (c) but dictionary from X is merged, i.e. obtained via
+system combination (max marginal decoding) which generally gives more
+robust segmentations.
+
+See also incr_train4.bash
+
+If X and Y are both so large than you need to split them up,  I
+suggest you use this method if you con't really care about stem
+indices and tags.   You can obtain a merged dictionary (see Section
+5) for X, then it use for each chunk of Y.  You can even run with
+different random seeds and merge dictionaries to obtain a final one
+for Y.
