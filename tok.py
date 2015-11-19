@@ -11,6 +11,11 @@ import unicodedata as ud
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
 
+
+excluded = set([ud.lookup("TIBETAN MARK INTERSYLLABIC TSHEG"), # tshegs appear between syllables
+                ud.lookup("TIBETAN MARK DELIMITER TSHEG BSTAR"),
+                ])
+
 def main():
   parser = argparse.ArgumentParser(description="unicode-based tokenization",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -36,7 +41,7 @@ def main():
     toks = []
     for char in line:
       cc = ud.category(char)
-      if cc.startswith("P") or cc.startswith("S"):
+      if (cc.startswith("P") or cc.startswith("S")) and char not in excluded:
         toks.append(' ')
         toks.append(char)
         toks.append(' ')
