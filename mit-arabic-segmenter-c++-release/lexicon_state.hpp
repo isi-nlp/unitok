@@ -90,7 +90,6 @@ private:
         const std::string& cls = type_counts [i]. get<2>();
         const int tag = num_tags > 1 ? roll_die() : 1;
         word_state ws (w, c, cls, tag);
-
         if (it != input_dict.end())
           {
             word_state ws_in_dict = it->second;

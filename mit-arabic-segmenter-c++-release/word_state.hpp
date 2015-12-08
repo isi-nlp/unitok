@@ -59,19 +59,25 @@ public:
     spans ( make_whole_word_span(word) )
   {
     assert (tag > 0);
+    // wcls needed to ensure length match
+    std::wstring wcls = morphsyn::widen_string(cls_);
     // create class change map: each class change is another pointer
-    if (cls_ != "#" && word.size() == cls_.size()) {
+    //    std::cout << "Map for [" << w << "] = " << word.size() 
+    //          << ", [" << cls_ << "] = " << wcls.size() <<  std::endl;
+    if (cls_ != "#" && word.size() == wcls.size()) {
       char last='x';
       int wordpos=0;
       int changepos=0;
-      for (std::string::const_iterator it = cls_.begin(), end = cls_.end(); it != end; ++it) {
+      for (std::wstring::const_iterator it = wcls.begin(), end = wcls.end(); it != end; ++it) {
         if (*it != last){
+          //    std::cout << changepos << " -> " << wordpos << std::endl;
           charmap[changepos++]=wordpos;
           last=*it;
         }
         wordpos++;
       }
       charmap[changepos]=wordpos;
+      //      std::cout << changepos << " -> " << wordpos << std::endl;
     }
   }
 

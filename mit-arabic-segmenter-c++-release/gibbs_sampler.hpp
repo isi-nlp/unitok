@@ -174,13 +174,23 @@ word_state sample_new_word_state ( dart_type& dart, lexicon_state& state, const 
   const size_t word_len = ws. get_word_len();
   //  std::cout << ws << std::endl;
 
-  // TODO JM: use heuristics to reduce all possible spans for even long spans.
-  // TODO JM: can take advantage of state having class sequence for word
+  // JM: use heuristics to reduce all possible spans for even long spans.
+  // JM: can take advantage of state having class sequence for word
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "Generating spans for " << ws << " = length " << word_len << std::endl;
+  // }
   const vector<vector<index_pair> > all_possible_spans = generate_possible_spans (word_len, state.MAX_SPANS,
                                                                                   ws.seg_frozen, ws.spans, ws.charmap);
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "DONE generating spans for " << ws << std::endl;
+  // }
+
   assert (all_possible_spans.size() > 0);
   assert (ws.tag > 0);
   const vector<int> all_possible_tags = generate_possible_tags (ws.tag_frozen, ws.tag, state.NUM_TAGS);
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "DONE generating tags for " << ws << std::endl;
+  //  }
   
   if (all_possible_spans.size() == 1 && all_possible_tags.size() == 1 && ws.stem_frozen)
     return word_state(ws);
@@ -194,9 +204,18 @@ word_state sample_new_word_state ( dart_type& dart, lexicon_state& state, const 
                                          all_possible_tags,
                                          state );
 
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "DONE getting sampling logs for " << ws << std::endl;
+  // }
+
   const vector<double>& logprobs = logs_and_space.first;
   const vector<boost::tuple<size_t,size_t,size_t> >& word_state_space = logs_and_space.second;
   const std::pair<size_t,double> sample = sample_from_logs (dart, logprobs);
+
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "DONE sampling logs for " << ws << std::endl;
+  // }
+
   const size_t chosen = sample.first;
   // const double logz = sample.second;
   word_state new_ws(ws);
@@ -204,6 +223,10 @@ word_state sample_new_word_state ( dart_type& dart, lexicon_state& state, const 
   new_ws. spans      =  all_possible_spans [ word_state_space [ chosen ]. get<0>() ];
   new_ws. stem_index =  word_state_space [ chosen ]. get<1>();
   new_ws. tag        =  word_state_space [ chosen ]. get<2>();
+
+  // if (word_len > 15 and !ws.seg_frozen) {
+  //   std::cout << "DONE creating new_ws for " << ws << " = " << new_ws << std::endl;
+  // }
 
   return new_ws;
 }

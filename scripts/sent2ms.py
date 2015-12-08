@@ -10,10 +10,14 @@ import gzip
 import unicodedata as ud
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
-def simplecat(x):
+def simplecat(x, nopuncsub):
   ''' simple unicode category of utf8 input. first letter of class, conflating L and M '''
   sc = ud.category(x)[0]
-  return "L" if sc == "M" else sc
+  if sc == "M":
+    return "L" 
+  if nopuncsub and (sc == "P" or sc == "S"):
+    return x
+  return sc
 
 def digsub(word, cls):
   ''' class-aware @-substitution '''
@@ -30,8 +34,9 @@ def main():
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
   parser.add_argument("--digitsub", "-g", action='store_true', default=False, help="map digits to @ symbol (but keep class D")
   parser.add_argument("--noclass", "-n", action='store_true', default=False, help="don't include symbol class string in third column")
+  parser.add_argument("--nopuncsub", "-p", action='store_true', default=False, help="don't substitute symbol or punctuation in class")
   parser.add_argument("--maxlength", "-x", default=0, type=int, help="tokens longer than this will not be split. 0 means split all tokens")
-#  parser.add_argument("--minlength", "-n", default=0, type=int, help="tokens shorter than this will not be split. 0 means split all tokens")
+  parser.add_argument("--boundary", "-b", default="~~MORPHSYN_BOUNDARY~~", help="boundary token. should match what is passed to run_segmenter.py")
 
 
 
@@ -48,11 +53,11 @@ def main():
   outfile = gzip.open(args.outfile.name, 'w') if args.outfile.name.endswith(".gz") else args.outfile
   outfile = writer(outfile)
 
-  outfile.write("-1\t~~\t#\t#\n")
+  outfile.write("-1\t%s\t#\t#\n" % args.boundary)
   for line in infile:
     for word in line.strip().split():
       cat = "0" if args.maxlength > 0 and len(word) > args.maxlength else "1"
-      classstring = ''.join(map(simplecat, word))
+      classstring = ''.join(map(lambda x: simplecat(x, args.nopuncsub), word))
       if args.digitsub:
         word = digsub(word, classstring)
       if args.noclass:

@@ -17,7 +17,7 @@ def smart_gzip_open(filename, *args):
 def create_options_parser():
   usage = "usage: %prog -h/--help"
   p = optparse.OptionParser(usage)
-  p.add_option("-b","--boundary",   dest="boundary",    help="BOUNDARY token", default="~~")
+  p.add_option("-b","--boundary",   dest="boundary",    help="BOUNDARY token", default="~~MORPHSYN_BOUNDARY~~")
   p.add_option("-c","--corpus",   dest="corpus",    help="corpus filename")
   p.add_option("-o","--outfile",   dest="outfile",    help="output dictionary")
   p.add_option("-i","--iters",  dest="numit",   help="number of ITERS", type="int", default=50)
@@ -237,9 +237,11 @@ def main():
     
     if options.utf8: print "python: using utf-8"
     for i in range(5):
-        print "python: corpus token %d has length %d" % (i,len(tokens[i]))
+        if len(tokens) > i:
+            print "python: corpus token %d has length %d" % (i,len(tokens[i]))
     for i in range(-5,0):
-        print "python: corpus token %d has length %d" % (i,len(tokens[i]))
+        if len(tokens) > abs(i):
+            print "python: corpus token %d has length %d" % (i,len(tokens[i]))
 
 
     input_dictionary = parse_and_import_dictionaries (options.dict, options.utf8)
