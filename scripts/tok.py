@@ -16,6 +16,19 @@ excluded = set([ud.lookup("TIBETAN MARK INTERSYLLABIC TSHEG"), # tshegs appear b
                 ud.lookup("TIBETAN MARK DELIMITER TSHEG BSTAR"),
                 ])
 
+def tokenize(line):
+  ''' Given a line of unicode, return the unitok tokenization of that line '''
+  toks = []
+  for char in line:
+    cc = ud.category(char)
+    if (cc.startswith("P") or cc.startswith("S")) and char not in excluded:
+      toks.append(' ')
+      toks.append(char)
+      toks.append(' ')
+    else:
+      toks.append(char)
+  return ' '.join(''.join(toks).split())
+  
 def main():
   parser = argparse.ArgumentParser(description="unicode-based tokenization",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -38,16 +51,7 @@ def main():
 
 
   for line in infile:
-    toks = []
-    for char in line:
-      cc = ud.category(char)
-      if (cc.startswith("P") or cc.startswith("S")) and char not in excluded:
-        toks.append(' ')
-        toks.append(char)
-        toks.append(' ')
-      else:
-        toks.append(char)
-    outfile.write(' '.join(''.join(toks).split())+"\n")
+    outfile.write(tokenize(line)+"\n")
 
 if __name__ == '__main__':
   main()
