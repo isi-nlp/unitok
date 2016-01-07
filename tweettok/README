@@ -1,0 +1,18 @@
+website that tokenizes randomly selected tweets
+
+interface:
+choose one or more tokenizers (check boxes)
+choose a language or 'random' selects from all languages
+(todo: choose a date?)
+
+then
+
+orig
+tok1
+tok2
+
+orig
+tok1
+tok2
+
+where tokn have red boxes showing where tokenization happened.
