@@ -40,23 +40,29 @@ def main():
 
   levtotal=0.0
   punctotal=0
+  chartotal=0
   senttotal=0
   for refline, hypline in izip(reffile, hypfile):
     # warn/skip if character streams not the same
     refline = refline.strip()
     hypline = hypline.strip()
+    # cdec workaround: all curly quotes become straight
+
     if "".join(refline.split()) != "".join(hypline.split()):
       sys.stderr.write("Warning: mismatched lines %s and %s. Skipping\n" % (refline, hypline))
       continue
     senttotal+=1
     # get punc count
     punctotal += len(filter(lambda x: x.startswith("P"), map(ud.category, list(refline))))
+    # get char total
+    chartotal += len("".join(list(refline.split())))
     # get lev
     levtotal += lev.distance(refline, hypline)
 
   outfile.write("Total distance %f\n" % levtotal)
   outfile.write("Per-line average %f\n" % (levtotal/senttotal))
   outfile.write("Per-punc average %f\n" % (levtotal/punctotal))
+  outfile.write("Per-char average %f\n" % (levtotal/chartotal))
 
 if __name__ == '__main__':
   main()

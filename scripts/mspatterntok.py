@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
 import argparse
 import sys
 import codecs
@@ -10,10 +10,14 @@ import gzip
 import unicodedata as ud
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
-def simplecat(x):
+def simplecat(x, nopuncsub):
   ''' simple unicode category of utf8 input. first letter of class, conflating L and M '''
   sc = ud.category(x)[0]
-  return "L" if sc == "M" else sc
+  if sc == "M":
+    return "L" 
+  if nopuncsub and (sc == "P" or sc == "S"):
+    return x
+  return sc
 
 def digsub(word, cls):
   ''' class-aware @-substitution '''
@@ -57,6 +61,7 @@ def main():
   parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('rb'), default=sys.stdin, help="input file")
   parser.add_argument("--patternfile", "-p", nargs='?', type=argparse.FileType('rb'), help="pattern file")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
+  parser.add_argument("--nopuncsub", "-n", action='store_true', default=False, help="don't substitute symbol or punctuation in class")
   parser.add_argument("--digitsub", "-g", action='store_true', default=False, help="dict has @ substitution for digits")
 
 
@@ -109,7 +114,7 @@ def main():
     for word in line.strip().split():
       # if common after digsub, get exception, else get pattern on non-digsub.
       # if no pattern, remember this. no tok. follow instructions to split word
-      classstring = ''.join(map(simplecat, word))
+      classstring = ''.join(map(lambda x: simplecat(x, args.nopuncsub), word))
       srchword = digsub(word, classstring) if args.digitsub else word
       try:
         if srchword in exceptionmap:
