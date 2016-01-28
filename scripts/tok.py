@@ -16,6 +16,20 @@ excluded = set([ud.lookup("TIBETAN MARK INTERSYLLABIC TSHEG"), # tshegs appear b
                 ud.lookup("TIBETAN MARK DELIMITER TSHEG BSTAR"),
                 ])
 
+def tokenizeoffset(data):
+  ''' given a token without whitespace, return offsets for where split should happen;
+      basically made for compatibility with mspatterntok '''
+  ret = set()
+  for offset, char in enumerate(data):
+    cc = ud.category(char)
+    if (cc.startswith("P") or cc.startswith("S")) and char not in excluded:
+      if offset > 0:
+        ret.add(offset)
+      if offset+1 < len(data):
+        ret.add(offset+1)
+  return sorted(list(ret))
+
+# TODO: replace tokenize with splitoninst(tokenizeoffset) per original word? to avoid code duplication
 def tokenize(data):
   toks = []
   for char in data:
