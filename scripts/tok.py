@@ -94,7 +94,7 @@ def tokenize(data):
 def main():
   parser = argparse.ArgumentParser(description="unicode-based tokenization",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-  parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('rb'), default=sys.stdin, help="input file")
+  parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input file")
   parser.add_argument("--offsetsfile", "-f", nargs='?', type=argparse.FileType('w'), default=None, help="file to write tokenization offsets (0-based space-seg start-end relative to original). default is not to write these")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
 
