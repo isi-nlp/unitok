@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import argparse
 import sys
 import codecs
-from itertools import izip
+if sys.version_info[0] == 2:
+  from itertools import izip
 from collections import defaultdict as dd
 import re
 import os.path
@@ -22,13 +23,14 @@ writer = codecs.getwriter('utf8')
 # TODO: make this py3 safe (as a nop)
 def prepfile(fh, code):
   ret = gzip.open(fh.name, code) if fh.name.endswith(".gz") else fh
-  if code.startswith('r'):
-    ret = reader(fh)
-  elif code.startswith('w'):
-    ret = writer(fh)
-  else:
-    sys.stderr.write("I didn't understand code "+code+"\n")
-    sys.exit(1)
+  if sys.version_info[0] == 2:
+    if code.startswith('r'):
+      ret = reader(fh)
+    elif code.startswith('w'):
+      ret = writer(fh)
+    else:
+      sys.stderr.write("I didn't understand code "+code+"\n")
+      sys.exit(1)
   return ret
 
 
@@ -100,7 +102,7 @@ def main():
 
   try:
     args = parser.parse_args()
-  except IOError, msg:
+  except IOError as msg:
     parser.error(str(msg))
   infile = prepfile(args.infile, 'r')
   outfile = prepfile(args.outfile, 'w')
