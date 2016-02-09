@@ -63,9 +63,9 @@ def main():
     # get lev
     sentdist= lev.distance(refline, hypline)
     levtotal += sentdist
-    if args.verbose:
+    if args.verbose and sentdist > 0:
       diffres = list(differ.compare([hypline+"\n",], [refline+"\n",]))
-      outfile.write("%f%s\n" % (sentdist, '\t'.join(diffres)))
+      outfile.write("%f\n%s\n" % (sentdist, ''.join(diffres)))
       #outfile.write("%f\t%s\t%s\n" % (sentdist, refline, hypline))
 
   outfile.write("Total distance %f\n" % levtotal)

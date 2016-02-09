@@ -56,11 +56,11 @@ def main():
         unchar = unchars.pop(0)
         tokchar = tokchars.pop(0)
         if unchar != tokchar:
-          if tokchar != ' ':
-            raise LineMatchError
+          #if tokchar != ' ':
+          #  raise LineMatchError
           tokchar = tokchars.pop(0)
-          if unchar != tokchar:
-            raise LineMatchError
+          #if unchar != tokchar:
+          #  raise LineMatchError
           curr="B"
         else:
           if unchar == " ":

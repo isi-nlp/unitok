@@ -14,6 +14,7 @@ from pystruct.models import ChainCRF
 from pystruct.learners import FrankWolfeSSVM
 import collections
 import itertools
+import pickle
 
 if sys.version_info[0] == 2:
   from itertools import izip
@@ -26,6 +27,23 @@ scriptdir = os.path.dirname(os.path.abspath(__file__))
 reader = codecs.getreader('utf8')
 writer = codecs.getwriter('utf8')
 
+
+#http://stackoverflow.com/questions/9518806/how-to-split-a-string-on-whitespace-and-retain-offsets-and-lengths-of-words
+# called 'using_split2'
+# note: returns (0, 3) for "abc" to better integrate below
+def wstok_offsets(line, _len=len):
+  ''' return whitsepace-tokenized line and character offsets '''
+  words = line.split()
+  index = line.index
+  offsets = []
+  append = offsets.append
+  running_offset = 0
+  for word in words:
+    word_offset = index(word, running_offset)
+    word_len = _len(word)
+    running_offset = word_offset + word_len
+    append((word, word_offset, running_offset))
+  return offsets
 
 def prepfile(fh, code):
   ret = gzip.open(fh.name, code) if fh.name.endswith(".gz") else fh
@@ -53,36 +71,95 @@ def lastclass(line, pos):
 def nextclass(line, pos):
   return "XE" if pos+1 == len(line) else charclass(line, pos+1, True)
 
-# features in use
-features = {'currclass': currclass,
-            'lastclass': lastclass,
-            'nextclass': nextclass,
+def puncid(line, pos):
+  ''' if punctuation, the literal character value '''
+  cc = charclass(line, pos, True)
+  if cc == 'P':
+    return line[pos]
+  return "X"
+
+# regular features in use
+features = {
+  'currclass': currclass,
+  'lastclass': lastclass,
+  'nextclass': nextclass,
+  'puncid': puncid,
            }
 
+# TODO: pre-tok global features in use
+# all features pertain to the original token
+# length
+# is capitalized (after initial punc)
+# looks like email
+# looks like hash tag
+# looks like url
+# punctuation only on ends
+
+def iscap(tok):
+  ''' is this token capitalized '''
+  for pos in range(len(tok)):
+    cc = charclass(tok, pos, False)
+    if cc.startswith("L"):
+      return cc == "Lu" or cc == "Lt"
+  return False
+
+def toklen(tok):
+  ''' how long is this token? '''
+  return len(tok)
+
+
+tokfeatures = {
+  'iscap': iscap,
+  'toklen': toklen,
+               }
+
+
 def featurize(line):
-  ''' get a feature vector for the line '''
+  ''' unify char and tok based featurization '''
+  charfeats  = char_featurize(line)
+  tokfeats = tok_featurize(line)
   ret = []
+  for pos in range(len(line)): 
+    item = charfeats[pos]
+    item.update(tokfeats[pos])
+    ret.append(item)
+  return np.array(ret)
+
+def char_featurize(line):
+  ''' get a feature vector for the line for char-based features'''
+  ret = dd(int)
   for pos in range(len(line)):
     vec = {}
     for fname, ffun in features.items():
       vec[fname] = ffun(line, pos)
-    ret.append(vec)
-  return np.array(ret)
+    ret[pos] = vec
+  return ret
 
+def tok_featurize(line):
+  ''' get token-based features in a char-based way '''
+  ret = dd(lambda: dd(str))
+  for (tok, start, end) in wstok_offsets(line):
+    for fname, ffun in tokfeatures.items():
+      val = ffun(tok)
+      for pos in range(start, end):
+        ret[pos][fname]=val
+  return ret
 
-def numberize_features(dataset, unrolled_dataset):
+def numberize_features(dataset, unrolled_dataset, dv=None):
   ''' turn non-numeric features into sparse binary features; also return the feature map '''
   # http://fastml.com/converting-categorical-data-into-numbers-with-pandas-and-scikit-learn/
   # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.DictVectorizer.html
-  dv = DictVectorizer(sparse=False) # can we make it true?
-  dv = dv.fit(unrolled_dataset.flatten())
+  if dv is None:
+    dv = DictVectorizer(sparse=False) # can we make it true?
+    dv = dv.fit(unrolled_dataset.flatten())
   return np.array(list(map(dv.transform, dataset))), dv
 
-def numberize_labels(labelset, unrolled_labelset):
+def numberize_labels(labelset, unrolled_labelset, le=None):
   ''' turn non-numeric labels into numeric space; also return the feature map '''
   # http://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.LabelEncoder.html
-  le = LabelEncoder()
-  le = le.fit(unrolled_labelset.flatten())
+  if le is None:
+    le = LabelEncoder()
+    le = le.fit(unrolled_labelset.flatten())
   return np.array(list(map(le.transform, labelset))), le
 
 basestring = (str, bytes)
@@ -99,7 +176,8 @@ def main():
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--untokfile", "-u", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="untok file")
   parser.add_argument("--biofile", "-b", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="bio file")
-  parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
+  parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('wb'), default=None, help="output file")
+  parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
 
 
 
@@ -110,7 +188,7 @@ def main():
 
   untokfile = prepfile(args.untokfile, 'r')
   biofile = prepfile(args.biofile, 'r')
-  outfile = prepfile(args.outfile, 'w')
+
 
   data = []
   mapdata = []
@@ -118,6 +196,9 @@ def main():
   maplabels = []
   for untokline, bioline in izip(untokfile, biofile):
     feats = featurize(untokline.strip())
+    if(args.debug):
+      sys.stderr.write(untokline)
+      sys.stderr.write(str(feats))
     data.append(feats)
     mapdata.extend(feats)
     labs = list(bioline.strip())
@@ -135,8 +216,18 @@ def main():
   # TONT
   print("TONT score with chain CRF: %f" % ssvm.score(data, labels))
 
+  ret = {}
+  ret['model']=ssvm
+  ret['feats']=datamap
+  ret['labels']=labelmap
+  if args.outfile is not None:
+    pickle.dump(ret, args.outfile)
 
-  model = ChainCRF
+  # print(data[0])
+  # print(data.shape)
+  # print(np.array([data[0],]).shape)
+  # preds = ssvm.predict(np.array([data[0],]))
+  # print(preds)
 if __name__ == '__main__':
   main()
 
