@@ -26,7 +26,10 @@ def prepfile(fh, code):
   return ret
 
 class LineMatchError(Exception):
-  pass
+  def __init__(self, value):
+    self.value=value
+  def __str__(self):
+    return repr(self.value)
 
 def main():
   parser = argparse.ArgumentParser(description="make bio token tags for annotated data",
@@ -47,7 +50,7 @@ def main():
   outfile = prepfile(args.outfile, 'w')
 
 
-  for untokline, tokline in izip(untokfile, tokfile):
+  for ln, (untokline, tokline) in enumerate(izip(untokfile, tokfile), start=1):
     unchars = list(untokline.strip())
     tokchars = list(tokline.strip())
     last="S"
@@ -56,11 +59,11 @@ def main():
         unchar = unchars.pop(0)
         tokchar = tokchars.pop(0)
         if unchar != tokchar:
-          #if tokchar != ' ':
-          #  raise LineMatchError
+          if tokchar != ' ':
+            raise LineMatchError("[%s] vs [%s]" % (unchar, tokchar))
           tokchar = tokchars.pop(0)
-          #if unchar != tokchar:
-          #  raise LineMatchError
+          if unchar != tokchar:
+            raise LineMatchError("[%s] vs [%s] after space" % (unchar, tokchar))
           curr="B"
         else:
           if unchar == " ":
@@ -71,8 +74,9 @@ def main():
             curr="B"
         outfile.write(curr)
         last=curr
-    except LineMatchError:
-      sys.stderr.write("Lines don't match: %s and %s" % (untokline, tokline))
+    except LineMatchError as e:
+      sys.stderr.write("Lines don't match at line %d of %s and %s : %s and %s" % (ln, untokfile.name, tokfile.name, untokline, tokline))
+      sys.stderr.write("Due to %s\n" % e.value)
       sys.exit(1)
     outfile.write("\n")
 

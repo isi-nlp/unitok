@@ -223,7 +223,7 @@ def prepdata(untokfile, biofile, debug):
       sys.stderr.write(str(feats))
     data.append(feats)
     mapdata.extend(feats)
-    labs = list(bioline.strip())
+    labs = bioline.strip().split()
     labels.append(labs)
     maplabels.extend(labs)
   data, datamap = numberize_features(np.array(data), np.array(mapdata))
@@ -231,10 +231,10 @@ def prepdata(untokfile, biofile, debug):
   return data, labels, datamap, labelmap
   
 def main():
-  parser = argparse.ArgumentParser(description="learn to tokenize",
+  parser = argparse.ArgumentParser(description="learn to segment and tokenize (really, any labeling)",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--untokfile", "-u", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="untok file")
-  parser.add_argument("--biofile", "-b", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="bio file")
+  parser.add_argument("--biofile", "-b", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="bio file. must match untok file and be space separated")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('wb'), default=None, help="output file")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
 
