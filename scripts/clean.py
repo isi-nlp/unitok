@@ -1,8 +1,9 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import argparse
 import sys
 import codecs
-from itertools import izip
+if sys.version_info[0] == 2:
+  from itertools import izip
 from collections import defaultdict as dd
 import re
 import os.path
@@ -10,6 +11,21 @@ import gzip
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
 
+reader = codecs.getreader('utf8')
+writer = codecs.getwriter('utf8')
+
+
+def prepfile(fh, code):
+  ret = gzip.open(fh.name, code) if fh.name.endswith(".gz") else fh
+  if sys.version_info[0] == 2:
+    if code.startswith('r'):
+      ret = reader(fh)
+    elif code.startswith('w'):
+      ret = writer(fh)
+    else:
+      sys.stderr.write("I didn't understand code "+code+"\n")
+      sys.exit(1)
+  return ret
 
 # TODO
 # also get rid of empty lines
@@ -18,6 +34,13 @@ scriptdir = os.path.dirname(os.path.abspath(__file__))
 # re.match(aprime, b).end(0)
 # b[7:].isspace()
 # len(b[7:]) == 0
+
+
+def clean(line):
+  line = line.strip()
+  if line == "" or line.isspace():
+    return None
+  return (' '.join(line.split()))
 
 def main():
   parser = argparse.ArgumentParser(description="remove empty lines and other undesirables",
@@ -29,23 +52,16 @@ def main():
 
   try:
     args = parser.parse_args()
-  except IOError, msg:
+  except IOError as msg:
     parser.error(str(msg))
 
-  reader = codecs.getreader('utf8')
-  writer = codecs.getwriter('utf8')
-
-  infile = gzip.open(args.infile.name, 'r') if args.infile.name.endswith(".gz") else args.infile
-  infile = reader(infile)
-
-
-  outfile = gzip.open(args.outfile.name, 'w') if args.outfile.name.endswith(".gz") else args.outfile
-  outfile = writer(outfile)
+  infile = prepfile(args.infile, 'r')
+  outfile = prepfile(args.outfile, 'w')
 
 
   for line in infile:
-    line = line.strip()
-    if line == "" or line.isspace():
+    line = clean(line)
+    if line is None:
       continue
     outfile.write(line+"\n")
 

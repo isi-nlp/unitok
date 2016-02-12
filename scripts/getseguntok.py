@@ -1,12 +1,12 @@
-#! /usr/bin/env python
+#! /usr/bin/env python3
 import argparse
 import sys
 import codecs
-from itertools import izip
 from collections import defaultdict as dd
 import re
 import os.path
 import gzip
+import clean
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -19,6 +19,21 @@ scriptdir = os.path.dirname(os.path.abspath(__file__))
 # b[7:].isspace()
 # len(b[7:]) == 0
 
+reader = codecs.getreader('utf8')
+writer = codecs.getwriter('utf8')
+
+def prepfile(fh, code):
+  ret = gzip.open(fh.name, code) if fh.name.endswith(".gz") else fh
+  if sys.version_info[0] == 2:
+    if code.startswith('r'):
+      ret = reader(fh)
+    elif code.startswith('w'):
+      ret = writer(fh)
+    else:
+      sys.stderr.write("I didn't understand code "+code+"\n")
+      sys.exit(1)
+  return ret
+
 def main():
   parser = argparse.ArgumentParser(description="given unsegmented, untokenized file and segmented, tokenized file, return segmented untokenized file",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -28,40 +43,34 @@ def main():
 
 
 
+
   try:
     args = parser.parse_args()
-  except IOError, msg:
+  except IOError as msg:
     parser.error(str(msg))
 
-  reader = codecs.getreader('utf8')
-  writer = codecs.getwriter('utf8')
-  origfile = gzip.open(args.origfile.name, 'r') if args.origfile.name.endswith(".gz") else args.origfile
-  origfile = reader(origfile)
-
-  tokfile = gzip.open(args.tokfile.name, 'r') if args.tokfile.name.endswith(".gz") else args.tokfile
-  tokfile = reader(tokfile)
-
-
-  outfile = gzip.open(args.outfile.name, 'w') if args.outfile.name.endswith(".gz") else args.outfile
-  outfile = writer(outfile)
+  origfile = prepfile(args.origfile, 'r')
+  tokfile = prepfile(args.tokfile, 'r')
+  outfile = prepfile(args.outfile, 'o')
 
 
   origlines = []
   for line in origfile:
-    line = line.strip()
-    if line == "" or line.isspace():
+    line = clean.clean(line)
+    if line is None:
       continue
     origlines.append(line)
   orig = ''.join(origlines)
-  for line in tokfile:
-    line = line.strip()
-    if line == "" or line.isspace():
+  origlen = map(len, origlines)
+  for ln, line in enumerate(tokfile, start=1):
+    line = clean.clean(line)
+    if line is None:
       continue
     squashline = "".join(line.split())
     rex = '\s*'.join(map(re.escape, list(squashline)))
     match = re.search(rex, orig, re.UNICODE)
     if match is None:
-      sys.stderr.write("Couldn't find [[[%s]]] in [[[%s]]]\n" % (line, orig[:len(line)]))
+      sys.stderr.write("Couldn't find [[[%s]]] in [[[%s]]] at line %d\n" % (line, orig[:len(line)], ln))
       sys.exit(1)
     prefix = orig[:match.start(0)]
     if (prefix is not None and not prefix.isspace() and prefix != ""):
