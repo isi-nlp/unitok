@@ -15,5 +15,5 @@ $SCRIPTDIR/sent2ms.py -g -x 50 -i $WORKDIR/digsub -o $WORKDIR/ms;
 LAST=2 ITERS=50 EXTRA="--classes" $SCRIPTDIR/../mit-arabic-segmenter-c++-release/train.bash $RANDOM $WORKDIR/ms $WORKDIR/base;
 sed 's/ /\n/g' $WORKDIR/digsub | sort | uniq -c | sort -k1nr > $WORKDIR/voc.count;
 paste -d ' ' $WORKDIR/voc.count <(awk '{print $2}' $WORKDIR/voc.count | $SCRIPTDIR/uniclass.py ) > $WORKDIR/voc.count.class;
-join -1 2 -2 1 <(LANG=C sort -k2 $WORKDIR/voc.count.class) <(LANG=C sort $WORKDIR/base-m2.dict) > $WORKDIR/dict.bycount;
+LANG=C join -1 2 -2 1 <(LANG=C sort -k2 $WORKDIR/voc.count.class) <(LANG=C sort $WORKDIR/base-m2.dict) > $WORKDIR/dict.bycount;
 cut -d' ' -f1,2,4,7- $WORKDIR/dict.bycount  | python $SCRIPTDIR/learnpattern.py -k -o $2;
