@@ -54,13 +54,13 @@ def main():
 
   for ln, (textline, markupline) in enumerate(zip(infile, markupfile), start=1):
     chars = list(textline.strip())
-    marks = markupline.strip().split()
+    marks = markupline.strip() if args.justbio else markupline.strip().split()
     if len(chars) != len(marks):
       raise IndexError("input and markup don't match: line %d\n" % ln)
     lastLabel = None
     for char, mark in zip(chars, marks):
       # mark = seg+label. seg = E (delete), S(boundary), N(ignore). label = X (must go with E), B (begin), I (in), O (out)
-      seg, label = mark.split('+')
+      seg, label = "N", mark if args.justbio else mark.split('+')
       if seg == "E":
         if label != "X":
           raise TypeError("Bad annotation: %s\n" % mark)
@@ -81,6 +81,10 @@ def main():
         for fh in (tokfile, biofile, untokfile):
           if fh is not None:
             fh.write('\n')
+    if args.justbio:
+      for fh in (tokfile, biofile, untokfile):
+        if fh is not None:
+          fh.write('\n')
 
 if __name__ == '__main__':
   main()
