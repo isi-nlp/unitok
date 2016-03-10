@@ -10,6 +10,14 @@ import gzip
 import unicodedata as ud
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
+excluded = set([ud.lookup("TIBETAN MARK INTERSYLLABIC TSHEG"), # tshegs appear between syllables
+                ud.lookup("TIBETAN MARK DELIMITER TSHEG BSTAR"),
+                ])
+
+def tibcat(tok):
+  if tok in excluded:
+    return 'T'
+  return ud.category(tok)
 
 def main():
   parser = argparse.ArgumentParser(description="replace (non-space) characters with unicode category.",
@@ -35,7 +43,7 @@ def main():
   for line in infile:
     toks = []
     for tok in line.strip().split():
-      toks.append(".".join(map(ud.category, tok)))
+      toks.append(".".join(map(tibcat, tok)))
       #outfile.write("%s %s\n" % ( tok, toks[-1]))
     outfile.write(' '.join(toks)+"\n")
 
