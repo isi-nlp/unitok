@@ -33,7 +33,8 @@ def main():
   parser = argparse.ArgumentParser(description="Given untok, unseg file and biosn markup, output seguntok, segtok, and bio files",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input file (untokenized, unsegmented source)")
-  parser.add_argument("--markupfile", "-m", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="biosn markup file")
+  parser.add_argument("--markupfile", "-m", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="bio(sn) markup file")
+  parser.add_argument("--justbio", "-j", action='store_true', default=False, help="assume input is BIO (nospace) markup")
   parser.add_argument("--untokfile", "-u", nargs='?', type=argparse.FileType('w'), default=None, help="segmented, untokenized file")
   parser.add_argument("--tokfile", "-t", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="segmented, tokenized file")
   parser.add_argument("--biofile", "-b", nargs='?', type=argparse.FileType('w'), default=None, help="bio file, representing tokenization")
