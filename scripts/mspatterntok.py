@@ -60,6 +60,7 @@ def splitoninst(word, pat):
 def classtag(word, nopuncsub):
   ''' get class tag sequence '''
   return ''.join(map(lambda x: simplecat(x, nopuncsub), word))
+
 def main():
   parser = argparse.ArgumentParser(description="Tokenize based on morphsyn-learned pattern tables",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
