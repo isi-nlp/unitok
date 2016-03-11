@@ -259,6 +259,21 @@ def formatContext(line):
 
 
 class ModelTree:
+  def getNode(modelTree, address):
+    ''' traverse down the tree to find the node matching the given address '''
+    if address=="<root>":
+      return modelTree
+    addressnums = map(int, address.split('.'))
+    ret = modelTree
+    sofar = []
+    for num in addressnums:
+      if num not in ret.children:
+        sys.stderr.write("Couldn't get %s; returning %s\n" % (address, '.'.join(map(str, sofar))))
+        break
+      ret = ret.children[num]
+      sofar.append(num)
+    return ret
+  
   def __init__(self, modeltype, data, info, label=0, modelparams=[], modelkwargs={}, parent=None):
     self.model = modeltype(*modelparams, **modelkwargs)
     self.data = data
