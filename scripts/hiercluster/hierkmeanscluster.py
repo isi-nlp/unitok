@@ -11,8 +11,8 @@ import re
 import os.path
 import gzip
 import unicodedata as ud
-import numpy as np
-from sklearn.feature_extraction import DictVectorizer
+import numpy as np # pip install numpy
+from sklearn.feature_extraction import DictVectorizer # pip install sklearn
 from sklearn.cluster import MiniBatchKMeans, KMeans
 import collections
 import itertools
@@ -20,7 +20,7 @@ import pickle
 import random
 import copy
 from collections import Counter
-from colorama import Fore, Back, Style
+from colorama import Fore, Back, Style # pip install colorama
 
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 

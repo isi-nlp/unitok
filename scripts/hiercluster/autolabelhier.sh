@@ -2,13 +2,18 @@
 
 set -e
 
-SCRIPTDIR=`dirname "$(greadlink -f "$0")"`;
+if hash greadlink 2> /dev/null; then
+    READLINK=greadlink
+else
+    READLINK=readlink
+fi
+SCRIPTDIR=`dirname "$($READLINK -f "$0")"`;
 SCRIPTNAME=`basename $0`;
 WORKDIR=`mktemp -d -t XXXXXX.$SCRIPTNAME`;
 #echo $WORKDIR;
 trap "rm -rf $WORKDIR" EXIT
 
-UNISCRIPTDIR=$SCRIPTDIR/uniscripts
+UNISCRIPTDIR=$SCRIPTDIR/..
 
 
 # train a model unsupervised
