@@ -12,14 +12,19 @@ import os.path
 import gzip
 import unicodedata as ud
 import numpy as np # pip install numpy
+import sklearn
 from sklearn.feature_extraction import DictVectorizer # pip install sklearn
-from sklearn.cluster import MiniBatchKMeans, KMeans
+from sklearn.cluster import MiniBatchKMeans, KMeans, DBSCAN
 import collections
 import itertools
 import pickle
 import random
 import copy
 from collections import Counter
+if int(sklearn.__version__.split('.')[0]) > 0 or int(sklearn.__version__.split('.')[1]) > 17:
+  from sklearn.exceptions import NotFittedError
+else:
+  from sklearn.utils.validation import NotFittedError
 from colorama import Fore, Back, Style # pip install colorama
 
 scriptdir = os.path.dirname(os.path.abspath(__file__))
@@ -275,6 +280,7 @@ class ModelTree:
     return ret
   
   def __init__(self, modeltype, data, info, label=0, modelparams=[], modelkwargs={}, parent=None):
+    self.modeltype = modeltype
     self.model = modeltype(*modelparams, **modelkwargs)
     self.data = data
     self.info = info
@@ -369,11 +375,14 @@ class ModelTree:
       sys.stderr.write("Not overwriting existing refinement\n")
       return
     sys.stderr.write("Dynamically refining\n")
-    labels = self.model.fit_predict(self.data)
+    try:
+      labels = self.model.predict(self.data)
+    except NotFittedError:
+      labels = self.model.fit_predict(self.data)
     for label in set(labels):
       subset = self.data[labels==label]
       subinfo = self.info[labels==label]
-      nextmodel = ModelTree(MiniBatchKMeans, subset, subinfo, label=label, modelkwargs={'n_clusters':self.model.n_clusters}, parent=self)
+      nextmodel = ModelTree(self.modeltype, subset, subinfo, label=label, modelkwargs={'n_clusters':self.model.n_clusters}, parent=self)
       self.add(nextmodel, label)
 
 
@@ -383,6 +392,9 @@ class ModelTree:
     self.info = info
     mostcommon = Counter(goldlabels).most_common(1)
     if mostcommon[0][1]/len(goldlabels) >= thresh:
+      self.handlabel = mostcommon[0][0]
+      if self.parent is not None:
+        self.parent.handlabels[self.label] = mostcommon[0][0]
       ofh.write("%s\t%s\t%f\n" % (self.getFullLabel([]), mostcommon[0][0], mostcommon[0][1]/len(goldlabels)))
       return
     else:
@@ -398,6 +410,7 @@ class ModelTree:
           self.children[label].classifydata(subset, subinfo, subgold, ofh, thresh=thresh)
         else:
           submostcommon = Counter(subgold).most_common(1)
+          self.handlabels[label] = submostcommon[0][0]
           ofh.write("%s.%d\t%s\t%f\n" % (self.getFullLabel([]), label, submostcommon[0][0], submostcommon[0][1]/len(subgold)))
       return
     
@@ -406,24 +419,30 @@ def prepfeatures(settings):
   features = {
     'currclass': currclass,
     'charid': charid,
-#  'isrepeat': isrepeat,
-#  'willrepeat': willrepeat,
+    'isrepeat': isrepeat,
+    'willrepeat': willrepeat,
   }
   if settings['leftcontext'] > 0:
     for i in range(1, settings['leftcontext']+1):
       features['class-%d' % i] = lambda x, y, i=i: classoffset(x, y, -i)
-      features['char-%d' % i] = lambda x, y, i=i: charidoffset(x, y, -i)
+      if settings['charfeature']:
+        features['char-%d' % i] = lambda x, y, i=i: charidoffset(x, y, -i)
   if settings['rightcontext'] > 0:
     for i in range(1, settings['rightcontext']+1):
       features['class+%d' % i] = lambda x, y, i=i: classoffset(x, y, i)
-      features['char+%d' % i] = lambda x, y, i=i: charidoffset(x, y, i)
+      if settings['charfeature']:
+        features['char+%d' % i] = lambda x, y, i=i: charidoffset(x, y, i)
 
   tokfeatures = {
     'iscap': iscap,
     'toklen': toklen,
     'isurl': isurl,
   }
+  bannedfeats = settings['banned'] if 'banned' in settings else []
 
+  for feat in copy.copy(tokfeatures).keys():
+    if feat in bannedfeats:
+      tokfeatures.pop(feat)
   return features, tokfeatures
 
 
@@ -440,10 +459,12 @@ def main():
   parser.add_argument("--minclustersize", "-z", default=10.0, type=float, help="no cluster splitting below this pct of training data")
   parser.add_argument("--leftcontext", "-l", default=5, type=int, help="make features for this number of previous characters")
   parser.add_argument("--rightcontext", "-r", default=0, type=int, help="make features for this number of next characters")
+  parser.add_argument("--nochar", "-n", action='store_false', dest='charfeature', default=True,  help="no character features (class only)")
   parser.add_argument("--possibles", "-p", nargs='+', default=['.'], help="set of characters to possibly split on")
   parser.add_argument("--handlabel", "-H", action='store_true', default=False, help="do hand labeling after training")
+  parser.add_argument("--dbscan", action='store_true', default=False, help="try dbscan instead of kmeans")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
-
+  parser.add_argument("--banned", nargs='+', default=[], help='tok-based features to remove')
 
   try:
     args = parser.parse_args()
@@ -461,7 +482,9 @@ def main():
   settings['rightcontext'] = args.rightcontext
   settings['possibles'] = args.possibles
   settings['unicodepossibles'] = args.unicodepossibles
-  
+  settings['charfeature'] = args.charfeature
+  settings['banned'] = args.banned
+
   features, tokfeatures = prepfeatures(settings)
   
 
@@ -473,7 +496,14 @@ def main():
   if(args.debug):
     print(data)
 
-  modelTree = ModelTree(MiniBatchKMeans, data, info, modelkwargs={'n_clusters':args.kclusters})
+  modeltype = MiniBatchKMeans
+  modelkwargs = {'n_clusters':args.kclusters}
+  if args.dbscan:
+    modeltype = DBSCAN
+    modelkwargs = {'eps':0.2}
+
+  print(modelkwargs)
+  modelTree = ModelTree(modeltype, data, info, modelkwargs=modelkwargs)
 
   datathresh = data.shape[0]*args.minclustersize/100
 
@@ -500,7 +530,7 @@ def main():
           subset = lastmodel.data[labels==label]
           subinfo = lastmodel.info[labels==label]
           if layer < args.layers-1 and subset.shape[0] > datathresh:
-            nextmodel = ModelTree(MiniBatchKMeans, subset, subinfo, label=label, modelkwargs={'n_clusters':args.kclusters}, parent=lastmodel)
+            nextmodel = ModelTree(modeltype, subset, subinfo, label=label, modelkwargs=modelkwargs, parent=lastmodel)
             nextmodelqueue.append(nextmodel)
             lastmodel.add(nextmodel, label)
           else:

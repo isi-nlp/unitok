@@ -43,7 +43,7 @@ def main():
   parser = argparse.ArgumentParser(description="add or modify hand labels on model file ",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--modelfile", "-m", nargs='?', type=argparse.FileType('rb'), default=sys.stdin, help="input model file")
-  parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('wb'), default=sys.stdout, help="output model file")
+  parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('wb'), default=None, help="output model file")
   parser.add_argument("--annfile", "-a", nargs='?', type=argparse.FileType('w'), default=None, help="output annotation file")
   parser.add_argument("--refine", "-r", action='store_true', default=False, help="dynamically refine")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
@@ -55,7 +55,7 @@ def main():
     parser.error(str(msg))
 
   modelfile = prepfile(args.modelfile, 'rb')
-  outfile = prepfile(args.outfile, 'wb')
+  outfile = prepfile(args.outfile, 'wb') if args.outfile is not None else None
   annfile = prepfile(args.annfile, 'w') if args.annfile is not None else None
 
   fullmodel = pickle.load(modelfile)
@@ -72,7 +72,8 @@ def main():
   if fullmodel['model'].handLabel(values=values, annfile=annfile, refine=args.refine):
     print("Stopping early")
 
-  pickle.dump(fullmodel, args.outfile)
+  if outfile is not None:
+    pickle.dump(fullmodel, outfile)
 
 if __name__ == '__main__':
   main()

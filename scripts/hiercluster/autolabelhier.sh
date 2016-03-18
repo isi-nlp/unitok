@@ -10,8 +10,8 @@ fi
 SCRIPTDIR=`dirname "$($READLINK -f "$0")"`;
 SCRIPTNAME=`basename $0`;
 WORKDIR=`mktemp -d -t XXXXXX.$SCRIPTNAME`;
-#echo $WORKDIR;
-trap "rm -rf $WORKDIR" EXIT
+echo $WORKDIR;
+#trap "rm -rf $WORKDIR" EXIT
 
 UNISCRIPTDIR=$SCRIPTDIR/..
 
