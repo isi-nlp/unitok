@@ -70,9 +70,6 @@ def main():
       if model.handlabel is not None and model.handlabel != "r":
         label = model.handlabel
         break
-      elif model.handlabels[int(code)] is not None and model.handlabels[int(code)] != "r":
-        label = model.handlabels[int(code)]
-        break
       else:
         model = model.children[int(code)]
     if label is None:
