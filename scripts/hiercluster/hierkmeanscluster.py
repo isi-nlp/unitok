@@ -281,14 +281,18 @@ class ModelTree:
   
   def __init__(self, modeltype, data, info, label=0, modelparams=[], modelkwargs={}, parent=None):
     self.modeltype = modeltype
-    self.model = modeltype(*modelparams, **modelkwargs)
+    self.modelparams = modelparams
+    self.modelkwargs = modelkwargs
+    self.model = None if modeltype is None else modeltype(*modelparams, **modelkwargs)
     self.data = data
     self.info = info
     self.label = label
     self.handlabel = None
     self.parent = parent
     self.children = {}
-    self.handlabels = {}
+    #self.handlabels = {}
+    #self.leafdata = {} # filled by classifydata when model leaves are hit
+    #self.leafinfo = {} # filled by classifydata when model leaves are hit
 
   def add(self, modelTree, label):
     self.children[label] = modelTree
@@ -310,6 +314,8 @@ class ModelTree:
 
   def labeldata(self, data):
     ''' recursively traverse through tree and assign label to data '''
+    if self.model is None:
+      return None
     result = self.model.predict(data)
     strresult = np.array(list(map(str, result)))
     if len(self.children) == 0:
@@ -321,8 +327,11 @@ class ModelTree:
           ret[result==value] = strresult[result==value]
         else:
           subresult = self.children[value].labeldata(data[result==value])
-          combination = list(map(lambda x: "%s.%s" % (x[0], x[1]), zip(strresult[result==value], subresult)))
-          ret[result==value] = np.array(combination, dtype=np.dtype(('U', 100)))
+          if subresult is None:
+            ret[result==value] = strresult[result==value]
+          else:
+            combination = list(map(lambda x: "%s.%s" % (x[0], x[1]), zip(strresult[result==value], subresult)))
+            ret[result==value] = np.array(combination, dtype=np.dtype(('U', 100)))
     return ret
 
   def printSamples(self, samples=20):
@@ -343,7 +352,7 @@ class ModelTree:
     localvalues = copy.copy(values)
     localvalues.append(("m", "more")) # more
     localvalues.append(("q", "quit")) # quit
-    if len(self.children) > 0 or refine:
+    if self.model is not None or refine:
       localvalues.append(("r", "refine"))
     while result is None:
       resp = input(" label ( %s ) ? >>" % ' '.join(map(lambda x: "%s=%s" % x, localvalues)))
@@ -359,8 +368,6 @@ class ModelTree:
     self.handlabel = result
     if annfile is not None:
       annfile.write("%s\t%s\n" % (result, fullLabel))
-    if self.parent is not None:
-      self.parent.handlabels[self.label] = result
     if result == "r":
       if len(self.children) == 0:
         self.refine()
@@ -369,6 +376,7 @@ class ModelTree:
           return True
 
 
+  # TODO: fix this for None refinement 
   def refine(self):
     ''' create submodels for this model '''
     if len(self.children) > 0:
@@ -382,7 +390,7 @@ class ModelTree:
     for label in set(labels):
       subset = self.data[labels==label]
       subinfo = self.info[labels==label]
-      nextmodel = ModelTree(self.modeltype, subset, subinfo, label=label, modelkwargs={'n_clusters':self.model.n_clusters}, parent=self)
+      nextmodel = ModelTree(self.modeltype, subset, subinfo, label=label, modelparams=self.modelparams, modelkwargs=self.modelkwargs, parent=self)
       self.add(nextmodel, label)
 
 
@@ -391,10 +399,8 @@ class ModelTree:
     self.data = data
     self.info = info
     mostcommon = Counter(goldlabels).most_common(1)
-    if mostcommon[0][1]/len(goldlabels) >= thresh:
+    if mostcommon[0][1]/len(goldlabels) >= thresh or self.model is None:
       self.handlabel = mostcommon[0][0]
-      if self.parent is not None:
-        self.parent.handlabels[self.label] = mostcommon[0][0]
       ofh.write("%s\t%s\t%f\n" % (self.getFullLabel([]), mostcommon[0][0], mostcommon[0][1]/len(goldlabels)))
       return
     else:
@@ -409,9 +415,13 @@ class ModelTree:
           subinfo = self.info[labels==label]
           self.children[label].classifydata(subset, subinfo, subgold, ofh, thresh=thresh)
         else:
-          submostcommon = Counter(subgold).most_common(1)
-          self.handlabels[label] = submostcommon[0][0]
-          ofh.write("%s.%d\t%s\t%f\n" % (self.getFullLabel([]), label, submostcommon[0][0], submostcommon[0][1]/len(subgold)))
+          sys.stderr.write("Error: %s not found in children of %s\n" % (label, self.getFullLabel([])))
+          sys.exit(1)
+          # self.leafdata[label] = subset
+          # self.leafinfo[label] = subinfo
+          # submostcommon = Counter(subgold).most_common(1)
+          # self.handlabels[label] = submostcommon[0][0]
+          # ofh.write("%s.%d\t%s\t%f\n" % (self.getFullLabel([]), label, submostcommon[0][0], submostcommon[0][1]/len(subgold)))
       return
     
 def prepfeatures(settings):
@@ -523,20 +533,19 @@ def main():
     if len(modelqueue) == 0:
       break
     for lastmodel in modelqueue:
-      if lastmodel.data.shape[0] > datathresh:
-        #print("Layer %d: classifying %d items for model %s" % (layer, lastmodel.data.shape[0], lastmodel.getFullLabel([])))
-        labels = lastmodel.model.fit_predict(lastmodel.data)
-        for label in set(labels):
-          subset = lastmodel.data[labels==label]
-          subinfo = lastmodel.info[labels==label]
-          if layer < args.layers-1 and subset.shape[0] > datathresh:
-            nextmodel = ModelTree(modeltype, subset, subinfo, label=label, modelkwargs=modelkwargs, parent=lastmodel)
-            nextmodelqueue.append(nextmodel)
-            lastmodel.add(nextmodel, label)
-          else:
-            printoutqueue.append(lastmodel)
-      else:
-        printoutqueue.append(lastmodel)
+      #print("Layer %d: classifying %d items for model %s" % (layer, lastmodel.data.shape[0], lastmodel.getFullLabel([])))
+      labels = lastmodel.model.fit_predict(lastmodel.data)
+      for label in set(labels):
+        subset = lastmodel.data[labels==label]
+        subinfo = lastmodel.info[labels==label]
+        if layer < args.layers-1 and subset.shape[0] > datathresh:
+          nextmodel = ModelTree(modeltype, subset, subinfo, label=label, modelkwargs=modelkwargs, parent=lastmodel)
+          nextmodelqueue.append(nextmodel)
+          lastmodel.add(nextmodel, label)
+        else:
+          nextmodel = ModelTree(None, subset, subinfo, label=label, modelkwargs=modelkwargs, parent=lastmodel)
+          lastmodel.add(nextmodel, label)
+          printoutqueue.append(lastmodel)
     modelqueue = nextmodelqueue
 
   if args.handlabel:
