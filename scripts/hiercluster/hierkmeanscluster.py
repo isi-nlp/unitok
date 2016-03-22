@@ -475,6 +475,8 @@ def main():
   parser.add_argument("--dbscan", action='store_true', default=False, help="try dbscan instead of kmeans")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
   parser.add_argument("--banned", nargs='+', default=[], help='tok-based features to remove')
+  parser.add_argument("--paramnames", nargs='+', default=[], help='algorithm parameter names')
+  parser.add_argument("--paramvals", nargs='+', default=[], help='algorithm parameter values')
 
   try:
     args = parser.parse_args()
@@ -512,6 +514,9 @@ def main():
     modeltype = DBSCAN
     modelkwargs = {'eps':0.2}
 
+  if len(args.paramnames) != 0:
+    modelkwargs = dict(zip(args.paramnames, map(float, args.paramvals)))
+
   print(modelkwargs)
   modelTree = ModelTree(modeltype, data, info, modelkwargs=modelkwargs)
 
@@ -533,6 +538,8 @@ def main():
     if len(modelqueue) == 0:
       break
     for lastmodel in modelqueue:
+      if lastmodel.parent is not None:
+        printoutqueue.append(lastmodel)
       #print("Layer %d: classifying %d items for model %s" % (layer, lastmodel.data.shape[0], lastmodel.getFullLabel([])))
       labels = lastmodel.model.fit_predict(lastmodel.data)
       for label in set(labels):
@@ -545,7 +552,7 @@ def main():
         else:
           nextmodel = ModelTree(None, subset, subinfo, label=label, modelkwargs=modelkwargs, parent=lastmodel)
           lastmodel.add(nextmodel, label)
-          printoutqueue.append(lastmodel)
+          printoutqueue.append(nextmodel)
     modelqueue = nextmodelqueue
 
   if args.handlabel:
