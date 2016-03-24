@@ -44,6 +44,7 @@ def main():
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input text file")
   parser.add_argument("--modelfile", "-m", nargs='?', type=argparse.FileType('rb'), default=sys.stdin, help="input model file")
+  parser.add_argument("--handlabel", "-H", action='store_true', default=False, help="use hand labels if available")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
 
@@ -65,7 +66,7 @@ def main():
 
 
   data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
-  labels = fullmodel['model'].labeldata(data)
+  labels = fullmodel['model'].handlabeldata(data) if args.handlabel else fullmodel['model'].labeldata(data)
   for label, theinfo in izip(labels, info):
     outfile.write("%d\t%d\t%s\n" % (theinfo['ln'], theinfo['offset'], label))
 

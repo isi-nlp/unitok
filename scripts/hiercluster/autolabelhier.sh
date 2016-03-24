@@ -34,6 +34,7 @@ LEV=$UNISCRIPTDIR/lev.py
 
 TRAINAD=$WORKDIR/trainad
 CLUSTERLABELS=$WORKDIR/cllabels
+LABELMODEL=$WORKDIR/labelmodel
 TESTCLUSTERS=$WORKDIR/testclusters
 TESTLABELS=$WORKDIR/testlabels
 TESTBIO=$WORKDIR/testbio
@@ -43,7 +44,7 @@ TESTHYP=$WORKDIR/testhyp
 $BIO2AD -i $TRAINBIO -o $TRAINAD
 # use ad format to label clusters
 # scripts/labelmodelfromann.py -m 50k.5p.5f.2x10.u.model -i eng.untok.train.0 -g eng.ad.train.0 -o 50k.5p.5f.2x10.u.hl0.model -a 50k.5p.5f.2x10.u.hl0.95.ann -t 0.95
-$LABELFROMANN -m $MODEL -i $TRAINUNTOK -g $TRAINAD -a $CLUSTERLABELS -t 0.95
+$LABELFROMANN -m $MODEL -i $TRAINUNTOK -g $TRAINAD -a $CLUSTERLABELS -t 0.95 -o $LABELMODEL
 # evaluate test file
 # scripts/evalhierkmeanscluster.py -i eng.untok.train.0 -m 50k.5p.5f.2x10.u.hl0.model -o eng.untok.train.0.50k.tont.label
 $CLUSTEREVAL -i $TESTUNTOK -m $MODEL -o $TESTCLUSTERS

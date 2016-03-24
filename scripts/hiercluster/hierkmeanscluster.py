@@ -215,7 +215,12 @@ def prepdata(textfile, targets, features, tokfeatures, debug, isTargetPunc=False
   window=10
   textfile, textfilefuture = tee(textfile)
   textfilefuture.__next__()
-  for ln, (line, nextline) in enumerate(izip(textfile, textfilefuture)):
+#  for ln, (line, nextline) in enumerate(izip(textfile, textfilefuture)):
+  for ln, line in enumerate(textfile):
+    try:
+      nextline = textfilefuture.__next__()
+    except StopIteration:
+      nextline = None
     if(debug):
       sys.stderr.write(line)
     tokfeats = tok_featurize(line, tokfeatures)
@@ -311,6 +316,21 @@ class ModelTree:
     self.info = None
     for _, child in self.children.items():
       child.clean()
+
+
+  def handlabeldata(self, data):
+    ''' recursively traverse through tree and assign handlabel to data '''
+    if self.handlabel is not None and self.handlabel != 'r':
+      return np.array([self.handlabel,]*data.shape[0])
+    if self.model is None:
+      fulllabel = self.getFullLabel([])
+      return np.array([fulllabel,]*data.shape[0])
+    result = self.model.predict(data)
+    ret = np.empty(result.shape, dtype=np.dtype(('U', 100)))
+    for value in set(result):
+      subresult = self.children[value].handlabeldata(data[result==value])
+      ret[result==value] = np.array(subresult, dtype=np.dtype(('U', 100)))
+    return ret
 
   def labeldata(self, data):
     ''' recursively traverse through tree and assign label to data '''
