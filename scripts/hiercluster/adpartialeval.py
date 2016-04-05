@@ -10,6 +10,7 @@ from collections import defaultdict as dd
 import re
 import os.path
 import gzip
+from colorama import Fore, Back, Style # pip install colorama
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -35,6 +36,8 @@ def main():
   parser = argparse.ArgumentParser(description="evaluate ad offset markup against ad per-char markup",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--reffile", "-r", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input per-char reference markup file")
+  parser.add_argument("--untokfile", "-u", nargs='?', type=argparse.FileType('r'), default=None, help="input untok file. triggers debug analysis")
+  parser.add_argument("--window", "-w", type=int, default=5,  help="how much context to show in debug analysis")
   parser.add_argument("--annfile", "-a", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input offset annotation file")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output accuracy file")
 
@@ -46,8 +49,15 @@ def main():
     parser.error(str(msg))
 
   reffile = prepfile(args.reffile, 'r')
+  untokfile = prepfile(args.untokfile, 'r') if args.untokfile is not None else None
   annfile = prepfile(args.annfile, 'r')
   outfile = prepfile(args.outfile, 'w')
+  window = args.window
+
+  untoks = []
+  if untokfile is not None:
+    for line in untokfile:
+      untoks.append(line.strip())
 
   anns = dd(dict)
   scores = dd(lambda: dd(float))
@@ -67,6 +77,12 @@ def main():
         if lab == anns[ln][of]:
           hits +=1.0
           scores[lab]["HIT"]+=1.0
+        elif untokfile is not None:
+          prefix = untoks[ln][max(0, of-window):of]
+          prefix = Fore.BLUE+'_'*(window-len(prefix))+Fore.RESET+prefix
+          suffix = untoks[ln][of+1:min(len(untoks[ln]), of+window+1)].rstrip('\n')
+          suffix = suffix+Fore.BLUE+'_'*(window-len(suffix))+Fore.RESET
+          outfile.write("%s\t%s\t%s%s%s\n" % (anns[ln][of], lab, prefix, untoks[ln][of], suffix))
 
   for lab in scores.keys():
     guess = scores[lab]["GUESS"]

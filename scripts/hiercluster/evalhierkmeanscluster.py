@@ -19,6 +19,7 @@ import itertools
 import pickle
 import hierkmeanscluster as hkmc
 from hierkmeanscluster import ModelTree
+from hierkmeanscluster import pDBSCAN
 
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
@@ -64,8 +65,9 @@ def main():
   features, tokfeatures = hkmc.prepfeatures(settings)
   
 
-
-  data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
+  # slight bit of bkwd compat
+  sparse = settings['sparse'] if 'sparse' in settings else True;
+  data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, sparse=sparse, isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
   labels = fullmodel['model'].handlabeldata(data) if args.handlabel else fullmodel['model'].labeldata(data)
   for label, theinfo in izip(labels, info):
     outfile.write("%d\t%d\t%s\n" % (theinfo['ln'], theinfo['offset'], label))

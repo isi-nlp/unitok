@@ -18,7 +18,7 @@ import collections
 import itertools
 import pickle
 import hierkmeanscluster as hkmc
-from hierkmeanscluster import ModelTree
+from hierkmeanscluster import ModelTree, pDBSCAN
 
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
@@ -75,7 +75,7 @@ def main():
              ('AN', 'attach left, newline right'),
              ('DN', 'disconnect left, newline right'),
              ]
-  data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
+  data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, sparse=settings['sparse'], isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
   goldlabels = []
   golddata = [ x.split() for x in [ y.strip() for y in goldfile.readlines() ] ]
   for infoblock in info:

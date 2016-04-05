@@ -12,6 +12,7 @@ import os.path
 import gzip
 import unicodedata as ud
 import numpy as np # pip install numpy
+import scipy as sp
 import sklearn
 from sklearn.feature_extraction import DictVectorizer # pip install sklearn
 from sklearn.cluster import MiniBatchKMeans, KMeans, DBSCAN
@@ -32,6 +33,23 @@ scriptdir = os.path.dirname(os.path.abspath(__file__))
 
 reader = codecs.getreader('utf8')
 writer = codecs.getwriter('utf8')
+
+# http://stackoverflow.com/questions/27822752/scikit-learn-predicting-new-points-with-dbscan
+class pDBSCAN(DBSCAN):
+  def predict(self, X_new, metric=sp.spatial.distance.cosine):
+    # Result is noise by default
+    y_new = np.ones(shape=X_new.shape[0], dtype=int)*-1 
+
+    # Iterate all input samples for a label
+    for j, x_new in enumerate(X_new):
+      # Find a core sample closer than EPS
+      for i, x_core in enumerate(self.components_): 
+        if metric(x_new, x_core) < self.eps:
+          # Assign label of x_core to x_new
+          y_new[j] = self.labels_[self.core_sample_indices_[i]]
+          break
+
+    return y_new
 
 # url matcher. https://gist.github.com/dperini/729294
 # python port by adam rofer
@@ -104,24 +122,21 @@ def charclass(line, pos, short):
   ''' what is the character class of the character at pos. and is it shorthand or not? '''
   char = line[pos]
   cclass = ud.category(char)
+#  print("%d of %s is %s; class is %s" % (pos, line, char, cclass))
   return cclass[0] if short else cclass
 
-def classoffset(line, pos, offset):
+def classoffset(line, pos, offset, short=True):
   ''' generalization of which character value '''
-  if pos+offset <= 0:
+#  print("Getting class of %d offset by %d in %s" % (pos, offset, line))
+  if pos+offset < 0:
     return "XS"
   if pos+offset >= len(line):
     return "XE"
-  return charclass(line, pos+offset, True)
+  return charclass(line, pos+offset, short)
 
-def currclass(line, pos):
-  return classoffset(line, pos, 0)
+def currclass(line, pos, short=True):
+  return classoffset(line, pos, 0, short=short)
 
-def lastclass(line, pos):
-  return classoffset(line, pos, -1)
-
-def nextclass(line, pos):
-  return classoffset(line, pos, +1)
 
 def charid(line, pos):
   ''' the literal character value (blows up model) '''
@@ -129,7 +144,7 @@ def charid(line, pos):
 
 def charidoffset(line, pos, offset):
   ''' generalization of which character value '''
-  if pos+offset <= 0:
+  if pos+offset < 0:
     return "XS"
   if pos+offset >= len(line):
     return "XE"
@@ -197,17 +212,17 @@ def tok_featurize(line, tokfeatures):
   return ret
 
 
-def numberize_features(dataset, dv=None):
+def numberize_features(dataset, sparse=True, dv=None):
   ''' turn non-numeric features into sparse binary features; also return the feature map '''
   # http://fastml.com/converting-categorical-data-into-numbers-with-pandas-and-scikit-learn/
   # http://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.DictVectorizer.html
   if dv is None:
-    dv = DictVectorizer(sparse=True)
+    dv = DictVectorizer(sparse=sparse)
     dv = dv.fit(dataset)
   return dv.transform(dataset), dv
 
 
-def prepdata(textfile, targets, features, tokfeatures, debug, isTargetPunc=False, uselookahead=True, dv=None):
+def prepdata(textfile, targets, features, tokfeatures, debug, sparse=True, isTargetPunc=False, uselookahead=True, dv=None):
   ''' Create appropriate data for learning along with mappers to make more data '''
   from itertools import tee
   data = []
@@ -252,17 +267,17 @@ def prepdata(textfile, targets, features, tokfeatures, debug, isTargetPunc=False
         data.append(feats)
 
 #  print(len(data))
-  data, datamap = numberize_features(data, dv=dv)
+  data, datamap = numberize_features(data, sparse=sparse, dv=dv)
 #  print(data[0])
 #  print(data[0].shape)
   return data, np.array(info), datamap
 
-def formatContext(line):
+def formatContext(line, docolor=True):
   ''' put color formatting around parts of an info tuple '''
   prefix=line['prefix'][:-1]
-  lastpre=Fore.GREEN+Style.BRIGHT+line['prefix'][-1]+Style.RESET_ALL
-  target=Fore.RED+Style.BRIGHT+line['char']+Style.RESET_ALL
-  firstsuff=Fore.GREEN+Style.BRIGHT+line['suffix'][0]+Style.RESET_ALL
+  lastpre=Fore.GREEN+Style.BRIGHT+line['prefix'][-1]+Style.RESET_ALL if docolor else line['prefix'][-1]
+  target=Fore.RED+Style.BRIGHT+line['char']+Style.RESET_ALL if docolor else line['char']
+  firstsuff=Fore.GREEN+Style.BRIGHT+line['suffix'][0]+Style.RESET_ALL if docolor else line['suffix'][0]
   suffix=line['suffix'][1:]
   displaystr=prefix+lastpre+target+firstsuff+suffix
   return displaystr
@@ -452,14 +467,15 @@ def prepfeatures(settings):
     'isrepeat': isrepeat,
     'willrepeat': willrepeat,
   }
+  short = settings['short'] if 'short' in settings else True
   if settings['leftcontext'] > 0:
     for i in range(1, settings['leftcontext']+1):
-      features['class-%d' % i] = lambda x, y, i=i: classoffset(x, y, -i)
+      features['class-%d' % i] = lambda x, y, i=i: classoffset(x, y, -i, short=short)
       if settings['charfeature']:
         features['char-%d' % i] = lambda x, y, i=i: charidoffset(x, y, -i)
   if settings['rightcontext'] > 0:
     for i in range(1, settings['rightcontext']+1):
-      features['class+%d' % i] = lambda x, y, i=i: classoffset(x, y, i)
+      features['class+%d' % i] = lambda x, y, i=i: classoffset(x, y, i, short=short)
       if settings['charfeature']:
         features['char+%d' % i] = lambda x, y, i=i: charidoffset(x, y, i)
 
@@ -485,11 +501,12 @@ def main():
   parser.add_argument("--unicodepossibles", "-u", action='store_true', default=False, help="interpret possibles list as unicode class prefixes")
   parser.add_argument("--kclusters", "-k", default=2, type=int, help="number of clusters per layer")
 #  parser.add_argument("--clean", "-c", action='store_true', default=False, help="clean model training (no tont)")
-  parser.add_argument("--layers", "-y", default=2, type=int, help="number of layers")
+  parser.add_argument("--layers", "-y", default=1, type=int, help="number of layers")
   parser.add_argument("--minclustersize", "-z", default=10.0, type=float, help="no cluster splitting below this pct of training data")
   parser.add_argument("--leftcontext", "-l", default=5, type=int, help="make features for this number of previous characters")
   parser.add_argument("--rightcontext", "-r", default=0, type=int, help="make features for this number of next characters")
   parser.add_argument("--nochar", "-n", action='store_false', dest='charfeature', default=True,  help="no character features (class only)")
+  parser.add_argument("--longclass", action='store_false', dest='shortclass', default=True,  help="use full character class instead of initial symbol")
   parser.add_argument("--possibles", "-p", nargs='+', default=['.'], help="set of characters to possibly split on")
   parser.add_argument("--handlabel", "-H", action='store_true', default=False, help="do hand labeling after training")
   parser.add_argument("--dbscan", action='store_true', default=False, help="try dbscan instead of kmeans")
@@ -497,6 +514,7 @@ def main():
   parser.add_argument("--banned", nargs='+', default=[], help='tok-based features to remove')
   parser.add_argument("--paramnames", nargs='+', default=[], help='algorithm parameter names')
   parser.add_argument("--paramvals", nargs='+', default=[], help='algorithm parameter values')
+  parser.add_argument("--noformat", action='store_false', dest='format', default=True, help="turn off color formatting in tont")
 
   try:
     args = parser.parse_args()
@@ -516,28 +534,35 @@ def main():
   settings['unicodepossibles'] = args.unicodepossibles
   settings['charfeature'] = args.charfeature
   settings['banned'] = args.banned
+  settings['short'] = args.shortclass
 
   features, tokfeatures = prepfeatures(settings)
   
 
+  modeltype = MiniBatchKMeans
+  modelkwargs = {'n_clusters':args.kclusters}
+  sparse = True
+  if args.dbscan:
+    modeltype = pDBSCAN
+    modelkwargs = {'eps':0.2}
+    sparse = False
+
+  settings['sparse']=sparse
+  if len(args.paramnames) != 0:
+    modelkwargs = dict(zip(args.paramnames, map(float, args.paramvals)))
+
+  print(modelkwargs)
+
+
 #  print("Preparing data")
-  data, info, datamap = prepdata(infile, args.possibles, features, tokfeatures, args.debug, isTargetPunc=args.unicodepossibles)
+  data, info, datamap = prepdata(infile, args.possibles, features, tokfeatures, args.debug, sparse=sparse,  isTargetPunc=args.unicodepossibles)
 
 #  print("Done")
   #print(data.shape)
   if(args.debug):
     print(data)
 
-  modeltype = MiniBatchKMeans
-  modelkwargs = {'n_clusters':args.kclusters}
-  if args.dbscan:
-    modeltype = DBSCAN
-    modelkwargs = {'eps':0.2}
 
-  if len(args.paramnames) != 0:
-    modelkwargs = dict(zip(args.paramnames, map(float, args.paramvals)))
-
-  print(modelkwargs)
   modelTree = ModelTree(modeltype, data, info, modelkwargs=modelkwargs)
 
   datathresh = data.shape[0]*args.minclustersize/100
@@ -586,7 +611,7 @@ def main():
         modelLabel = modelLabel+"("+model.handlabel+")"
       tontfile.write("%s\t%d\n" % (modelLabel, len(model.info)))
       for elem in model.info:
-        tontfile.write("%s\t%s\t%s\n" % (modelLabel, formatContext(elem), str(elem['feats'])))
+        tontfile.write("%s\t%s\t%s\n" % (modelLabel, formatContext(elem, args.format), str(elem['feats'])))
 
 
   

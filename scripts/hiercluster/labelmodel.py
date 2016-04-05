@@ -18,7 +18,7 @@ import collections
 import itertools
 import pickle
 import hierkmeanscluster as hkmc
-from hierkmeanscluster import ModelTree
+from hierkmeanscluster import ModelTree, pDBSCAN
 
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
