@@ -21,6 +21,7 @@ import itertools
 import pickle
 import random
 import copy
+import ast
 from collections import Counter
 if int(sklearn.__version__.split('.')[0]) > 0 or int(sklearn.__version__.split('.')[1]) > 17:
   from sklearn.exceptions import NotFittedError
@@ -158,14 +159,32 @@ def nextcharid(line, pos):
   ''' the next literal character value (blows up model) '''
   return charidoffset(line, pos, +1)
 
+def ispattern(line, pos, offset):
+  ''' generalization of isrepeat: look for a 'same character' offset away from pos '''
+  if pos+offset < 0:
+    return "XS"
+  if pos+offset >= len(line):
+    return "XE"
+  return str(line[pos] == line[pos+offset])
+
 def isrepeat(line, pos):
-  ''' is this character the same as the last character? '''
-  return "XS" if pos == 0 else str(line[pos] == line[pos-1])
+  ''' is this character the same as the last character modulo jump of x? '''
+  return ispattern(line, pos, -1)
 
 def willrepeat(line, pos):
   ''' is this character the same as the next character? '''
-  return "XE" if pos+1 == len(line) else str(line[pos] == line[pos+1])
+  return ispattern(line, pos, +1)
 
+def ismultipattern(line, pos, offset, times):
+  ''' is this the same as last modulo jump of offset, 2offset, ...times*offset? '''
+  try:
+    for i in range(1, times+1):
+      if not ast.literal_eval(ispattern(line, pos, offset*i)):
+        return 'False'
+  except ValueError:
+    return 'False'
+  return str('True')
+  
 
 # TODO: punkt-inspired features
 # length of token minus periods
@@ -403,6 +422,7 @@ class ModelTree:
     self.handlabel = result
     if annfile is not None:
       annfile.write("%s\t%s\n" % (result, fullLabel))
+      annfile.flush()
     if result == "r":
       if len(self.children) == 0:
         self.refine()
@@ -467,6 +487,18 @@ def prepfeatures(settings):
     'isrepeat': isrepeat,
     'willrepeat': willrepeat,
   }
+  if 'extendedpatterns' in settings and settings['extendedpatterns']:
+    extfeats = {
+      'isrep2' : lambda x, y: ispattern(x, y, -2),
+      'isrep3' : lambda x, y: ispattern(x, y, 2),
+      'willrep2' : lambda x, y: ispattern(x, y, -3),
+      'willrep3' : lambda x, y: ispattern(x, y, 3),
+      'isrep2x2' : lambda x, y: ismultipattern(x, y, -2, 2),
+      'isrep3x2' : lambda x, y: ismultipattern(x, y, -3, 2),
+      'willrep2x2' : lambda x, y: ismultipattern(x, y, 2, 2),
+      'willrep3x2' : lambda x, y: ismultipattern(x, y, 3, 2)
+    }
+    features.update(extfeats)
   short = settings['short'] if 'short' in settings else True
   if settings['leftcontext'] > 0:
     for i in range(1, settings['leftcontext']+1):
@@ -515,6 +547,7 @@ def main():
   parser.add_argument("--paramnames", nargs='+', default=[], help='algorithm parameter names')
   parser.add_argument("--paramvals", nargs='+', default=[], help='algorithm parameter values')
   parser.add_argument("--noformat", action='store_false', dest='format', default=True, help="turn off color formatting in tont")
+  parser.add_argument("--expat", action='store_true', default=False, help="add some extended repeating patterns")
 
   try:
     args = parser.parse_args()
@@ -535,6 +568,7 @@ def main():
   settings['charfeature'] = args.charfeature
   settings['banned'] = args.banned
   settings['short'] = args.shortclass
+  settings['extendedpatterns'] = args.expat
 
   features, tokfeatures = prepfeatures(settings)
   
