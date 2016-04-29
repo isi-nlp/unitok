@@ -220,7 +220,7 @@ def featurize(line, pos, features):
     vec[fname] = ffun(line, pos)
   return vec
 
-def tok_featurize(line, tokfeatures):
+def tok_featurize(line, tokfeatures, externals): # externals are used by ffun
   ''' get token-based features in a char-based way '''
   ret = dd(lambda: dd(str))
   for (tok, start, end) in wstok_offsets(line):
@@ -241,12 +241,17 @@ def numberize_features(dataset, sparse=True, dv=None):
   return dv.transform(dataset), dv
 
 
-def prepdata(textfile, targets, features, tokfeatures, debug, sparse=True, isTargetPunc=False, uselookahead=True, dv=None):
+def prepdata(textfile, features, tokfeatures, debug, settings, uselookahead=True, dv=None):
   ''' Create appropriate data for learning along with mappers to make more data '''
   from itertools import tee
   data = []
   info = []
   window=10
+  targets = settings['possibles'] if 'possibles' in settings else []
+  removetargets = settings['removepossibles'] if 'removepossibles' in settings else []
+  externals = settings['externalfeatures'] if 'externalfeatures' in settings else []
+  sparse = settings['sparse'] if 'sparse' in settings else True
+  isTargetPunc = settings['unicodepossibles'] if 'unicodepossibles' in settings else False
   textfile, textfilefuture = tee(textfile)
   textfilefuture.__next__()
 #  for ln, (line, nextline) in enumerate(izip(textfile, textfilefuture)):
@@ -257,13 +262,12 @@ def prepdata(textfile, targets, features, tokfeatures, debug, sparse=True, isTar
       nextline = None
     if(debug):
       sys.stderr.write(line)
-    tokfeats = tok_featurize(line, tokfeatures)
+    tokfeats = tok_featurize(line, tokfeatures, externals)
     linewithlookahead = line.strip('\n')+" "+nextline if (uselookahead and nextline is not None) else line
     iterline = list(line.strip())
-    if isTargetPunc:
-      iterline = list(map(lambda x: ud.category(x)[0], iterline))
-    for lastloc, tok in enumerate(iterline):
-      if tok in targets:
+    moditerline = list(map(lambda x: ud.category(x)[0], iterline)) if isTargetPunc else iterline
+    for lastloc, (tok, origtok) in enumerate(zip(moditerline, iterline)):
+      if tok in targets and origtok not in removetargets:
         feats = featurize(linewithlookahead, lastloc, features)
         feats.update(tokfeats[lastloc])
         prefix = linewithlookahead[max(0, lastloc-window):lastloc]
@@ -389,7 +393,7 @@ class ModelTree:
     return ret
 
   def printSamples(self, samples=20):
-    sampleset = range(len(self.info)) if len(self.info) <= samples else np.random.randint(len(self.info), size=(samples,))
+    sampleset = range(len(self.info)) if len(self.info) <= samples else np.random.choice(len(self.info), replace=False, size=(samples,))
     for ln in sampleset:
       line = self.info[ln]
       print(formatContext(line))
@@ -516,19 +520,45 @@ def prepfeatures(settings):
     'toklen': toklen,
     'isurl': isurl,
   }
+  # external features become tok features
+  externalfeats = {}
+  if 'externalfeatures' in settings and settings['externalfeatures'] is not None:
+    for fname, data in settings['externalfeatures'].items():
+      # kludgy way to get dimensionality: look at the first record
+      datalen = 0
+      for tupword, tup in data.items():
+        datalen = len(tup)
+        break
+      for i in range(datalen):
+        def fun(x, externals=settings['externalfeatures'], fname=fname, i=i):
+          if x not in externals[fname]: # externals should be passed to prepfeatures
+            return 0
+          return externals[fname][x][i]
+        externalfeats["%s.%d" % (fname, i)] = fun
+    tokfeatures.update(externalfeats)
   bannedfeats = settings['banned'] if 'banned' in settings else []
 
   for feat in copy.copy(tokfeatures).keys():
     if feat in bannedfeats:
       tokfeatures.pop(feat)
+  #print(tokfeatures)
   return features, tokfeatures
 
+def prepexternals(fh):
+  ''' given file of the form word \t feature1 \t feature2... make a simple dict to the array of feats '''
+  # TODO: if needed, make the dict a dd templated on an empty vector of the proper length
+  ret = {}
+  for line in fh:
+    toks = line.strip().split('\t')
+    ret[toks[0]] = list(map(float, toks[1:]))
+  return ret
 
 def main():
   parser = argparse.ArgumentParser(description="k means clustering for periods. see unitok/scripts/learntok for some inspiration",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input file")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('wb'), default=None, help="output file")
+  parser.add_argument("--externalfiles", "-e", nargs='+', default=[], type=argparse.FileType('r'), help="extra feature files")
   parser.add_argument("--tontfile", "-t", nargs='?', type=argparse.FileType('w'), default=None, help="test on train output file")
   parser.add_argument("--unicodepossibles", "-u", action='store_true', default=False, help="interpret possibles list as unicode class prefixes")
   parser.add_argument("--kclusters", "-k", default=2, type=int, help="number of clusters per layer")
@@ -540,6 +570,7 @@ def main():
   parser.add_argument("--nochar", "-n", action='store_false', dest='charfeature', default=True,  help="no character features (class only)")
   parser.add_argument("--longclass", action='store_false', dest='shortclass', default=True,  help="use full character class instead of initial symbol")
   parser.add_argument("--possibles", "-p", nargs='+', default=['.'], help="set of characters to possibly split on")
+  parser.add_argument("--removepossibles", "-v", nargs='+', default=[], help="set of characters from the possibles list to not split on (helpful for removing period, comma, etc")
   parser.add_argument("--handlabel", "-H", action='store_true', default=False, help="do hand labeling after training")
   parser.add_argument("--dbscan", action='store_true', default=False, help="try dbscan instead of kmeans")
   parser.add_argument("--debug", "-d", action='store_true', default=False, help="debug mode")
@@ -556,7 +587,10 @@ def main():
 
   infile = prepfile(args.infile, 'r')
   tontfile = prepfile(args.tontfile, 'w') if args.tontfile is not None else None
-
+  externalfiles = {}
+  for fh in args.externalfiles:
+    externalfiles[fh.name] = prepexternals(prepfile(fh, 'r'))
+    
   settings = {}
   settings['kclusters'] = args.kclusters
   settings['layers'] = args.layers
@@ -564,11 +598,13 @@ def main():
   settings['leftcontext'] = args.leftcontext
   settings['rightcontext'] = args.rightcontext
   settings['possibles'] = args.possibles
+  settings['removepossibles'] = args.removepossibles
   settings['unicodepossibles'] = args.unicodepossibles
   settings['charfeature'] = args.charfeature
   settings['banned'] = args.banned
   settings['short'] = args.shortclass
   settings['extendedpatterns'] = args.expat
+  settings['externalfeatures'] = externalfiles
 
   features, tokfeatures = prepfeatures(settings)
   
@@ -585,11 +621,11 @@ def main():
   if len(args.paramnames) != 0:
     modelkwargs = dict(zip(args.paramnames, map(float, args.paramvals)))
 
-  print(modelkwargs)
+  #print(modelkwargs)
 
 
 #  print("Preparing data")
-  data, info, datamap = prepdata(infile, args.possibles, features, tokfeatures, args.debug, sparse=sparse,  isTargetPunc=args.unicodepossibles)
+  data, info, datamap = prepdata(infile, features, tokfeatures, args.debug, settings)
 
 #  print("Done")
   #print(data.shape)

@@ -66,8 +66,9 @@ def main():
   
 
   # slight bit of bkwd compat
-  sparse = settings['sparse'] if 'sparse' in settings else True;
-  data, info, datamap = hkmc.prepdata(infile, settings['possibles'], features, tokfeatures, args.debug, sparse=sparse, isTargetPunc=settings['unicodepossibles'], dv=fullmodel['feats'])
+  sparse = settings['sparse'] if 'sparse' in settings else True
+  external = settings['externalfeatures'] if 'externalfeatures' in settings else None
+  data, info, datamap = hkmc.prepdata(infile, features, tokfeatures, args.debug, settings, dv=fullmodel['feats'])
   labels = fullmodel['model'].handlabeldata(data) if args.handlabel else fullmodel['model'].labeldata(data)
   for label, theinfo in izip(labels, info):
     outfile.write("%d\t%d\t%s\n" % (theinfo['ln'], theinfo['offset'], label))

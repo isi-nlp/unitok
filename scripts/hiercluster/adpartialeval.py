@@ -31,6 +31,16 @@ def prepfile(fh, code):
   return ret
 
 
+def convertlabel(label, pos, context):
+  ''' given a label and a character's position in a context string, replace parts 
+  of the label with 'X' if there is whitespace or nothing adjacent to the position '''
+  elements = list(label)
+  if pos == 0 or context[pos-1] == ' ':
+    elements[0] = 'X'
+  if pos+1 >= len(context) or context[pos+1] == ' ':
+    elements[1] = 'X'
+  return ''.join(elements)
+
 
 def main():
   parser = argparse.ArgumentParser(description="evaluate ad offset markup against ad per-char markup",
@@ -39,6 +49,7 @@ def main():
   parser.add_argument("--untokfile", "-u", nargs='?', type=argparse.FileType('r'), default=None, help="input untok file. triggers debug analysis")
   parser.add_argument("--window", "-w", type=int, default=5,  help="how much context to show in debug analysis")
   parser.add_argument("--annfile", "-a", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input offset annotation file")
+  parser.add_argument("--spaceaware", "-s", action='store_true', default=False, help="be space aware: no penalty for wrong label if adjacent to space (in each direction); requires -u")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output accuracy file")
 
 
@@ -50,6 +61,9 @@ def main():
 
   reffile = prepfile(args.reffile, 'r')
   untokfile = prepfile(args.untokfile, 'r') if args.untokfile is not None else None
+  if untokfile is None and args.spaceaware:
+    sys.stderr.write("untokfile (-u) required with -s\n")
+    sys.exit(1)
   annfile = prepfile(args.annfile, 'r')
   outfile = prepfile(args.outfile, 'w')
   window = args.window
@@ -65,6 +79,8 @@ def main():
   toks = 0.0
   for line in annfile:
     ln, of, lab = line.strip().split('\t')
+    if args.spaceaware:
+      lab = convertlabel(lab, int(of), untoks[int(ln)])
     anns[int(ln)][int(of)]=lab
     scores[lab]["GUESS"]+=1.0
     toks+=1.0
@@ -72,6 +88,8 @@ def main():
 
   for ln, line in enumerate(reffile):
     for of, lab in enumerate(line.strip().split()):
+      if args.spaceaware:
+        lab = convertlabel(lab, int(of), untoks[int(ln)])
       if of in anns[ln]:
         scores[lab]["GOLD"]+=1.0
         if lab == anns[ln][of]:

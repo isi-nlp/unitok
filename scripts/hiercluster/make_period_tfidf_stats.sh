@@ -17,9 +17,12 @@ trap "rm -rf $WORKDIR" EXIT
 INFILE=${1:-/dev/stdin};
 OUTFILE=/dev/stdout;
 
+SCALESTATS=$SCRIPTDIR/scalestats.py
+
 CLEANFILE=$WORKDIR/cleaned
 PERIODVOCAB=$WORKDIR/periodvocab
 VOCAB=$WORKDIR/vocab
+PRENORM=$WORKDIR/prenorm
 
 # clean input
 tr -cd '\11\12\15\40-\176' < $INFILE > $CLEANFILE;
@@ -28,7 +31,9 @@ sed 's/ /\n/g' < $CLEANFILE | grep "\.$" | LANG=C sort | uniq -c | awk '{print s
 # all vocab
 sed 's/ /\n/g' < $CLEANFILE | sort | uniq -c | awk '{print $2,$1}' | awk 'NF==2{print}' | LANG=C sort -k1 > $VOCAB;
 # period ender, its count, version without period's count, delta, ratio
-LANG=C join -o 2.2,2.3,1.2 -j 1 $VOCAB $PERIODVOCAB | awk '{print $1,$2,$3,$2-$3, (($2+0.0)/($3+0.0))}' > $OUTFILE;
+LANG=C join -o 2.2,2.3,1.2 -j 1 $VOCAB $PERIODVOCAB | awk 'BEGIN{OFS="\t"}{print $1,$2-$3, (($2+0.0)/($3+0.0))}' > $PRENORM;
 # same as above but for versions with no period ender, so fake the stats
-LANG=C join -e 0 -o 2.2,2.3,2.9 -j 1 -v 2 $VOCAB $PERIODVOCAB | awk '{print $1,$2,$3,$2-$3, (($2+0.0)/($3+1.0))}' >> $OUTFILE;
+LANG=C join -e 0 -o 2.2,2.3,2.9 -j 1 -v 2 $VOCAB $PERIODVOCAB | awk 'BEGIN{OFS="\t"}{print $1,$2-$3, (($2+0.0)/($3+1.0))}' >> $PRENORM;
+# scale the values
+$SCALESTATS -i $PRENORM -f 1 2 -o $OUTFILE
 
