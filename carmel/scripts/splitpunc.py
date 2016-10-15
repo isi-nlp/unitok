@@ -45,7 +45,7 @@ def getsplits(word, maxsplits=-1, maxpos=-1):
   codes = map(ud.category, list(word))
   choices = []
   for spot, code in enumerate(codes):
-    if code.startswith("P"):
+    if code.startswith("P") or code.startswith("S"):
       if spot > 0:
         choices.append(spot)
       if spot+1 < len(word):

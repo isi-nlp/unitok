@@ -76,14 +76,13 @@ def main():
     outfile.write(' '.join(toks)+"\n")
   # assume spaces will only be inserted at punctuation and symbol
   detokfile.write("0\n")
+  detokfile.write('(0 (PUNC.0 "space" *e* 1!) (PUNC.0 *e* *e* 1!))\n')
+  detokfile.write('(PUNC.1 (0 "space" *e* 1!) (0 *e* *e* 1!))\n')
   for char in chars:
-    detokfile.write('(0 (0 %s %s))\n' % (char, char))
-  nextid=1
+    detokfile.write('(0 (0 %s %s 1!))\n' % (char, char))
   for char in puncs:
-    detokfile.write('(0 (%d.0 "space" *e*) (%d.0 *e* *e*))\n' % (nextid, nextid))
-    detokfile.write('(%d.0 (%d.1 %s %s))\n' % (nextid, nextid, char, char))
-    detokfile.write('(%d.1 (0 "space" *e*) (0 *e* *e*))\n' % nextid)
-    nextid+=1
+    detokfile.write('(PUNC.0 (PUNC.1 %s %s 1!))\n' % (char, char))
+
 
 
 if __name__ == '__main__':

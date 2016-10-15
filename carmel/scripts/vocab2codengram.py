@@ -77,18 +77,18 @@ def main():
     word = udize(origword)
     modorigword = origword.replace('"', '\\"')
     modword = word.replace('"', '\\"')
-    u2wfile.write(" (0 \"%s\" \"%s\")" % (modword, modorigword))
+    u2wfile.write(" (0 \"%s\" \"%s\" 1!)" % (modword, modorigword))
     udwords.add(modword)
     chars = ['"quote"' if x == '"' else '"%s"' % x for x in list(origword)]
 #    print(word)
 #    print(chars)
-    w2cfile.write("(START (%d-0 \"%s\" %s))\n" % (ln, modorigword, chars[0]))
+    w2cfile.write("(START (%d-0 \"%s\" %s 1!))\n" % (ln, modorigword, chars[0]))
     lastcn = 0
     for cn, char in enumerate(chars[1:], start=1):
-      w2cfile.write("(%d-%d (%d-%d *e* %s))\n" % (ln, lastcn, ln, cn, char))
+      w2cfile.write("(%d-%d (%d-%d *e* %s 1!))\n" % (ln, lastcn, ln, cn, char))
       lastcn = cn
-    w2cfile.write("(%d-%d (WEND *e* *e*))\n" % (ln, lastcn))
-  w2cfile.write("""(WEND (END *e* *e*))
+    w2cfile.write("(%d-%d (WEND *e* *e* 1!))\n" % (ln, lastcn))
+  w2cfile.write("""(WEND (END *e* *e* 1!))
 (WEND (START *e* \"space\"))
 """)
   u2wfile.write(")\n")

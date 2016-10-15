@@ -14,11 +14,6 @@ import unicodedata as ud
 from itertools import chain, combinations
 scriptdir = os.path.dirname(os.path.abspath(__file__))
 
-# https://docs.python.org/2/library/itertools.html
-def powerset(iterable):
-    "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 reader = codecs.getreader('utf8')
 writer = codecs.getwriter('utf8')
@@ -64,14 +59,14 @@ def main():
     chars = ['"quote"' if x == '"' else '"%s"' % x for x in list(word)]
 #    print(word)
 #    print(chars)
-    w2cfile.write("(START (%d-0 \"%s\" %s))\n" % (ln, modword, chars[0]))
+    w2cfile.write("(START (%d-0 \"%s\" %s 1!))\n" % (ln, modword, chars[0]))
     lastcn = 0
     for cn, char in enumerate(chars[1:], start=1):
-      w2cfile.write("(%d-%d (%d-%d *e* %s))\n" % (ln, lastcn, ln, cn, char))
+      w2cfile.write("(%d-%d (%d-%d *e* %s 1!))\n" % (ln, lastcn, ln, cn, char))
       lastcn = cn
-    w2cfile.write("(%d-%d (WEND *e* *e*))\n" % (ln, lastcn))
-  w2cfile.write("""(WEND (END *e* *e*))
-(WEND (START *e* \"space\"))
+    w2cfile.write("(%d-%d (WEND *e* *e* 1!))\n" % (ln, lastcn))
+  w2cfile.write("""(WEND (END *e* *e* 1!))
+(WEND (START *e* \"space\" 1!))
 """)
   outfile.write(")\n")
 
