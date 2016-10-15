@@ -1,4 +1,5 @@
-#! /usr/bin/env python
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import argparse
 import sys
 import codecs
@@ -36,17 +37,20 @@ def main():
 
   outfile = gzip.open(args.outfile.name, 'w') if args.outfile.name.endswith(".gz") else args.outfile
   outfile = writer(outfile)
-
+  stderr = writer(sys.stderr)
 
   levtotal=0.0
   punctotal=0
   senttotal=0
   for refline, hypline in izip(reffile, hypfile):
     # warn/skip if character streams not the same
-    refline = refline.strip()
-    hypline = hypline.strip()
+    # quote thing is workaround for cdectok eval
+    refline = refline.strip().replace(u'“', u'"').replace(u'”', u'"')
+    hypline = hypline.strip().replace(u'“', u'"').replace(u'”', u'"')
+
+
     if "".join(refline.split()) != "".join(hypline.split()):
-      sys.stderr.write("Warning: mismatched lines %s and %s. Skipping\n" % (refline, hypline))
+      stderr.write("Warning: mismatched lines %s and %s. Skipping\n" % (refline, hypline))
       continue
     senttotal+=1
     # get punc count
