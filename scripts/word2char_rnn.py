@@ -8,8 +8,11 @@ from collections import defaultdict as dd
 import re
 import os.path
 import gzip
+import tempfile
+import shutil
+import atexit
+import unicodedata as ud
 scriptdir = os.path.dirname(os.path.abspath(__file__))
-
 
 reader = codecs.getreader('utf8')
 writer = codecs.getwriter('utf8')
@@ -27,27 +30,18 @@ def prepfile(fh, code):
       sys.exit(1)
   return ret
 
-# TODO
-# also get rid of empty lines
-# aprime='\s*'.join(list(a))
-# re.match(aprime, b).start(0)
-# re.match(aprime, b).end(0)
-# b[7:].isspace()
-# len(b[7:]) == 0
-
-
-def clean(line):
-  line = line.strip()
-  if line == "" or line.isspace():
-    return None
-  return (' '.join(line.split()))
-
 def main():
-  parser = argparse.ArgumentParser(description="remove empty lines and other undesirables",
+  parser = argparse.ArgumentParser(description="make file of space-separated words into file of space-separated chars, handling space appropriately",
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
   parser.add_argument("--infile", "-i", nargs='?', type=argparse.FileType('r'), default=sys.stdin, help="input file")
   parser.add_argument("--outfile", "-o", nargs='?', type=argparse.FileType('w'), default=sys.stdout, help="output file")
+  parser.add_argument("--addcharclass", "-a", action='store_true', default=False, help="insert unicode character class after each character")
 
+  workdir = tempfile.mkdtemp(prefix=os.path.basename(__file__), dir=os.getenv('TMPDIR', '/tmp'))
+
+  def cleanwork():
+    shutil.rmtree(workdir, ignore_errors=True)
+  atexit.register(cleanwork)
 
 
   try:
@@ -58,13 +52,15 @@ def main():
   infile = prepfile(args.infile, 'r')
   outfile = prepfile(args.outfile, 'w')
 
-
   for line in infile:
-    line = clean(line)
-    if line is None:
-      continue
-    outfile.write(line+"\n")
+    line = line.strip()
+    spaceseq = [ x.replace(' ', 'sp') for x in list(line) ]
+    if args.addcharclass:
+      catseq = map(ud.category, list(line))
+      outfile.write(' '.join([' '.join(x) for x in zip(spaceseq, catseq)])+"\n")
+    else:
+      outfile.write(' '.join( spaceseq )+"\n")
+
 
 if __name__ == '__main__':
   main()
-

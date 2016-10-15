@@ -1,0 +1,31 @@
+website that tokenizes randomly selected tweets
+
+interface:
+choose one or more tokenizers (check boxes)
+choose a language or 'random' selects from all languages
+(todo: choose a date?)
+
+then
+
+orig
+tok1
+tok2
+
+orig
+tok1
+tok2
+
+where tokn have red boxes showing where tokenization happened.
+
+
+
+getting apache going:
+
+http://coolestguidesontheplanet.com/forbidden-403-you-dont-have-permission-to-access-username-on-this-server/
+https://gist.github.com/vr000m/f7c2030f8365841093af
+
+
+use flask to send a list of languages available, dates available, files available, to select
+tweets at random.
+
+javascript should slurp in json format and process it appropriately.
